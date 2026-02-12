@@ -1,0 +1,145 @@
+# Real-Time System Metrics Platform - Implementation Plan
+
+## Project Overview
+Build a small observability stack for monitoring system metrics on a local machine. The system consists of:
+- **C++ Metrics Agent**: Collects system metrics
+- **Python Backend (FastAPI)**: Processes and stores data
+- **Dashboard**: Real-time visualization
+- **Infrastructure**: Docker + Minikube deployment
+
+---
+
+## Phase 1: Core Pipeline
+*Goal: Establish the basic end-to-end flow*
+
+### Agent (C++)
+- [ ] Collect total CPU usage (overall)
+- [ ] Collect top 5 processes by CPU usage
+- [ ] Send metrics as JSON via HTTP POST every 2 seconds to backend
+- [ ] Build as containerized application
+
+### Backend (Python/FastAPI)
+- [ ] Set up FastAPI application with Redis connection
+- [ ] Implement `/ingest/metrics` endpoint to receive and store metrics in Redis
+- [ ] Implement `/api/metrics/recent` endpoint to return last 5 minutes of data
+- [ ] Build as containerized application
+
+### Dashboard
+- [ ] Create web interface (HTML/CSS/JavaScript)
+- [ ] Poll `/api/metrics/recent` every 2–3 seconds
+- [ ] Display line chart: Total CPU usage over time
+- [ ] Display table: Top processes (name, PID, CPU%)
+- [ ] Build as containerized application
+
+### Infrastructure
+- [ ] Create Dockerfile for agent
+- [ ] Create Dockerfile for backend
+- [ ] Create Dockerfile for dashboard
+- [ ] Test local Docker builds
+
+---
+
+## Phase 2: Real-Time Updates and Richer Metrics
+*Goal: Add WebSocket support and expand metrics*
+
+### Agent (C++)
+- [ ] Collect per-core CPU usage
+- [ ] Collect memory usage (per-process and system)
+- [ ] Collect thread count
+- [ ] Collect I/O metrics
+- [ ] Collect handles
+
+### Backend (Python/FastAPI)
+- [ ] Implement WebSocket endpoint for real-time updates
+- [ ] Set up PostgreSQL connection for historical data
+- [ ] Implement metrics storage in PostgreSQL
+- [ ] Implement Pub/Sub mechanism via Redis for WebSocket broadcasts
+- [ ] Design schema for metrics table in PostgreSQL
+
+### Dashboard
+- [ ] Switch from polling to WebSocket for real-time updates
+- [ ] Add multi-line chart for per-core CPU usage
+- [ ] Add memory usage visualization
+- [ ] Add thread count visualization
+- [ ] Add I/O metrics visualization
+- [ ] Add handles visualization
+
+### Infrastructure
+- [ ] Set up PostgreSQL container
+- [ ] Set up Redis container
+- [ ] Update Kubernetes manifests with StatefulSets for databases
+
+---
+
+## Phase 3: Advanced Features
+*Goal: Production-ready system with advanced capabilities*
+
+### Agent (C++)
+- [ ] Implement multi-threaded architecture (separate collection and sending)
+- [ ] Add JSON/YAML configuration file support
+- [ ] Make sampling intervals configurable
+- [ ] Allow selection of which metrics to collect
+- [ ] Implement graceful shutdown (signal handling)
+- [ ] Add structured logging
+
+### Backend (Python/FastAPI)
+- [ ] Implement rate limiting for agent connections
+- [ ] Add authentication/authorization for agent
+- [ ] Implement alert rules (e.g., CPU > 90% for 10 seconds)
+- [ ] Add alert notification system
+- [ ] Implement metrics retention policy
+- [ ] Add API documentation (OpenAPI/Swagger)
+
+### Dashboard
+- [ ] Add alert status display
+- [ ] Add alert history/logs
+- [ ] Add configuration UI
+- [ ] Add performance metrics for backend
+- [ ] Implement user authentication
+
+### Infrastructure
+- [ ] Create Kubernetes Deployment manifests for backend
+- [ ] Create Kubernetes Deployment manifests for agent
+- [ ] Create Kubernetes Deployment manifests for dashboard
+- [ ] Create Kubernetes StatefulSet manifests for Redis
+- [ ] Create Kubernetes StatefulSet manifests for PostgreSQL
+- [ ] Create Kubernetes Service manifests for inter-component communication
+- [ ] Deploy complete system on Minikube
+- [ ] Document deployment steps
+
+---
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Agent | C++ |
+| Backend | Python (FastAPI) |
+| Dashboard | Python (FastAPI) + JavaScript (Chart.js or ECharts) |
+| In-Memory Cache | Redis |
+| Historical Storage | PostgreSQL |
+| Containerization | Docker |
+| Orchestration | Kubernetes (Minikube) |
+
+---
+
+## Key Design Decisions
+
+1. **Metrics Frequency**: 2-second intervals for collection and sending
+2. **Data Retention**: Last 5 minutes in Redis (real-time), historical in PostgreSQL
+3. **Communication**: HTTP/REST for agent→backend, WebSocket for backend→dashboard
+4. **Deployment**: Minikube only (no Docker Compose)
+5. **Top Processes**: Show top 5 by CPU usage
+
+---
+
+## Success Criteria
+
+- [ ] Agent collects and sends metrics successfully
+- [ ] Backend ingests and stores metrics
+- [ ] Dashboard displays real-time CPU metrics
+- [ ] WebSocket provides live updates without polling
+- [ ] PostgreSQL retains historical data
+- [ ] System deploys and runs on Minikube
+- [ ] Alerts trigger on defined thresholds
+- [ ] System handles graceful shutdown
