@@ -46,6 +46,7 @@ MANIFEST
 # IDE
 .idea/
 .vscode/
+.vs
 *.swp
 *.swo
 *~
