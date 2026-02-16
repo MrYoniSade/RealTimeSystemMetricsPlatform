@@ -4,21 +4,52 @@
 #include <iomanip>
 #include <array>
 
-// Callback for CURL to handle response
+/**
+ * @brief Appends response payload bytes emitted by libcurl.
+ *
+ * libcurl calls this function one or more times as response chunks arrive.
+ * The payload is appended to the std::string provided via CURLOPT_WRITEDATA.
+ *
+ * @param contents Pointer to the received bytes.
+ * @param size Size of each element in bytes.
+ * @param nmemb Number of elements.
+ * @param userp Opaque user pointer expected to be std::string*.
+ * @return Number of bytes consumed by this callback.
+ */
 static size_t write_callback(void* contents, size_t size, size_t nmemb, std::string* userp) {
     userp->append((char*)contents, size * nmemb);
     return size * nmemb;
 }
 
+/**
+ * @brief Creates an HTTP client bound to a backend base URL.
+ *
+ * Initializes global libcurl state for the current process. This class assumes
+ * process-level startup/shutdown style usage consistent with the agent runtime.
+ *
+ * @param backend_url Base backend URL (for example: http://localhost:8000).
+ */
 HttpClient::HttpClient(const std::string& backend_url) 
     : backend_url(backend_url) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
+/**
+ * @brief Releases libcurl global resources.
+ */
 HttpClient::~HttpClient() {
     curl_global_cleanup();
 }
 
+/**
+ * @brief Serializes metrics into the backend JSON schema.
+ *
+ * Numeric values are emitted with two decimal places for consistency and
+ * stable downstream parsing.
+ *
+ * @param metrics Metrics snapshot to serialize.
+ * @return JSON payload string for the ingest endpoint.
+ */
 std::string HttpClient::metrics_to_json(const SystemMetrics& metrics) {
     std::ostringstream json;
     
@@ -47,6 +78,17 @@ std::string HttpClient::metrics_to_json(const SystemMetrics& metrics) {
     return json.str();
 }
 
+/**
+ * @brief Sends a metrics snapshot to the backend ingest endpoint.
+ *
+ * This method posts JSON to `${backend_url}/ingest/metrics` and captures
+ * diagnostic state for callers:
+ * - `last_error_message` is set on failure and cleared at the start.
+ * - `last_status_code` stores the latest HTTP response code when available.
+ *
+ * @param metrics Metrics snapshot to send.
+ * @return true on HTTP 2xx response; false on network, transport, or HTTP errors.
+ */
 bool HttpClient::send_metrics(const SystemMetrics& metrics) {
     last_error_message.clear();
     last_status_code = 0;
@@ -102,10 +144,21 @@ bool HttpClient::send_metrics(const SystemMetrics& metrics) {
     return true;
 }
 
+/**
+ * @brief Returns the most recent send error message.
+ *
+ * Empty string means the last send operation succeeded.
+ */
 const std::string& HttpClient::last_error() const {
     return last_error_message;
 }
 
+/**
+ * @brief Returns the HTTP status from the most recent send attempt.
+ *
+ * Returns 0 when no status code was available (for example if request setup
+ * or network transport failed before a response was received).
+ */
 long HttpClient::last_http_status() const {
     return last_status_code;
 }
