@@ -60,13 +60,22 @@ if(BUILD_TESTING)
         src/http_client.cpp
     )
 
+    add_executable(metrics_collector_tests
+        tests/metrics_collector_test.cpp
+        src/metrics_collector.cpp
+    )
+
     target_include_directories(http_client_tests PRIVATE include)
+    target_include_directories(metrics_collector_tests PRIVATE include)
     target_link_libraries(http_client_tests PRIVATE Catch2::Catch2WithMain CURL::libcurl)
+    target_link_libraries(metrics_collector_tests PRIVATE Catch2::Catch2WithMain)
 
     if(WIN32)
         target_link_libraries(http_client_tests PRIVATE pdh psapi wer)
+        target_link_libraries(metrics_collector_tests PRIVATE pdh psapi wer)
     endif()
 
     include(Catch)
     catch_discover_tests(http_client_tests)
+    catch_discover_tests(metrics_collector_tests)
 endif()
