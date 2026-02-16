@@ -31,6 +31,18 @@ public:
     bool send_metrics(const SystemMetrics& metrics);
 
     /**
+     * @brief Gets the last error message from send_metrics.
+     * @return A human-readable error message. Empty if the last send succeeded.
+     */
+    const std::string& last_error() const;
+
+    /**
+     * @brief Gets the last HTTP status code returned by the backend.
+     * @return HTTP status code, or 0 if unavailable.
+     */
+    long last_http_status() const;
+
+    /**
      * @brief Converts system metrics into a JSON string.
      * @param metrics The system metrics to be converted.
      * @return A JSON string representation of the metrics.
@@ -39,4 +51,6 @@ public:
 
 private:
     std::string backend_url; ///< The URL of the backend server.
+    std::string last_error_message;
+    long last_status_code = 0;
 };

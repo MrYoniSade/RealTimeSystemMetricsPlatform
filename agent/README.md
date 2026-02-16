@@ -32,14 +32,40 @@ cd agent
 ./metrics_agent --backend-url http://localhost:8000 --interval 2
 ```
 
+Run without a backend:
+
+```bash
+./metrics_agent --no-backend --interval 2
+```
+
 ### Arguments
 - `--backend-url`: URL of the backend service (default: http://localhost:8000)
 - `--interval`: Collection interval in seconds (default: 2)
+- `--no-backend`: Disables HTTP sending and only logs collected metrics
+
+Environment variable support:
+- `BACKEND_URL`: Used as the default backend URL when provided. `--backend-url` still overrides it.
+
+Note on hostnames:
+- `http://backend:8000` works inside container/Kubernetes networking.
+- For local Windows/Linux/macOS runs outside containers, use `http://localhost:8000`.
 
 ## Docker Build
 
 ```bash
 docker build -t metrics-agent:latest -f agent/Dockerfile .
+```
+
+By default, the Docker image now runs in no-backend mode:
+
+```bash
+docker run --rm metrics-agent:latest
+```
+
+To send to a backend later, override the entrypoint arguments:
+
+```bash
+docker run --rm metrics-agent:latest --backend-url http://host.docker.internal:8000
 ```
 
 ## Architecture

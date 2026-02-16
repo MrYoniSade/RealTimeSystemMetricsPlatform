@@ -22,4 +22,4 @@ COPY . .
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build -j
 
-ENTRYPOINT ["/app/build/metrics_agent", "--backend-url", "http://backend:8000"]
+ENTRYPOINT ["/app/build/metrics_agent", "--no-backend"]
