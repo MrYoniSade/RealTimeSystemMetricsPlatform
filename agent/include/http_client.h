@@ -30,13 +30,13 @@ public:
      */
     bool send_metrics(const SystemMetrics& metrics);
 
-private:
-    std::string backend_url; ///< The URL of the backend server.
-
     /**
      * @brief Converts system metrics into a JSON string.
      * @param metrics The system metrics to be converted.
      * @return A JSON string representation of the metrics.
      */
     std::string metrics_to_json(const SystemMetrics& metrics);
+
+private:
+    std::string backend_url; ///< The URL of the backend server.
 };
