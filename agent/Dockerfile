@@ -22,4 +22,5 @@ COPY . .
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build -j
 
-ENTRYPOINT ["/app/build/metrics_agent", "--no-backend"]
+ENTRYPOINT ["/app/build/metrics_agent"]
+CMD ["--no-backend"]

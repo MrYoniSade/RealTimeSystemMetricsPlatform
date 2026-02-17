@@ -56,16 +56,16 @@ Note on hostnames:
 docker build -t metrics-agent:latest -f agent/Dockerfile .
 ```
 
-By default, the Docker image now runs in no-backend mode:
+By default, the Docker image runs in no-backend mode:
 
 ```bash
 docker run --rm metrics-agent:latest
 ```
 
-To send to a backend later, override the entrypoint arguments:
+To send to a backend, pass runtime arguments (these replace the default `CMD`):
 
 ```bash
-docker run --rm metrics-agent:latest --backend-url http://host.docker.internal:8000
+docker run --rm metrics-agent:latest --backend-url http://backend:8000 --interval 2
 ```
 
 ## Architecture

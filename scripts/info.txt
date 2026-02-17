@@ -1,0 +1,14 @@
+*** Create one user-defined network: ***
+docker network create metrics-net
+*** Build images from repo root: ***
+docker build -t metrics-backend:latest -f backend/Dockerfile . 
+docker build -t metrics-agent:latest -f agent/Dockerfile agent
+*** If containers already exist, recreate agent with the new image: ***
+docker rm -f agent
+docker build --no-cache -t metrics-agent:latest -f agent/Dockerfile agent
+*** Run Redis (required by backend): ***
+docker run -d --name redis --network metrics-net -p 6379:6379 redis:7-alpine
+*** Run backend on same network, pointing to Redis container name: ***
+docker run -d --name backend --network metrics-net -p 8000:8000 -e REDIS_HOST=redis metrics-backend:latest
+*** Run agent on same network, pointing to backend container name: ***
+docker run -d --name agent --network metrics-net metrics-agent:latest --backend-url http://backend:8000 --interval 2
