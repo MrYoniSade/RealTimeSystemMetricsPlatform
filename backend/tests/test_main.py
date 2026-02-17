@@ -61,6 +61,18 @@ class FakeRedisRecent:
         return self.items
 
 
+class FakeRedisRecentSpy(FakeRedisRecent):
+    """Redis stub that captures zrangebyscore call arguments for assertions."""
+
+    def __init__(self, items):
+        super().__init__(items)
+        self.last_call = None
+
+    def zrangebyscore(self, key, minimum, maximum):
+        self.last_call = (key, minimum, maximum)
+        return self.items
+
+
 def sample_payload(ts: int | None = None):
     """Build a valid metrics payload for endpoint tests."""
 
@@ -182,3 +194,98 @@ def test_get_recent_metrics_redis_error(monkeypatch):
 
     assert response.status_code == 503
     assert "Redis unavailable" in response.json()["detail"]
+
+
+def test_get_recent_metrics_empty_result(monkeypatch):
+    """Returns an empty list when no records are present in Redis."""
+
+    monkeypatch.setattr(backend_main, "get_redis", lambda: FakeRedisRecent([]))
+
+    client = TestClient(backend_main.app)
+    response = client.get("/api/metrics/recent")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_recent_metrics_skips_schema_invalid_json(monkeypatch):
+    """Skips JSON records that parse but do not match MetricsPayload schema."""
+
+    valid_payload = sample_payload()
+    missing_timestamp = json.dumps(
+        {
+            "total_cpu_percent": 40.0,
+            "top_processes": [],
+        }
+    )
+
+    fake_items = [missing_timestamp, json.dumps(valid_payload)]
+    monkeypatch.setattr(backend_main, "get_redis", lambda: FakeRedisRecent(fake_items))
+
+    client = TestClient(backend_main.app)
+    response = client.get("/api/metrics/recent")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["timestamp"] == valid_payload["timestamp"]
+
+
+def test_get_recent_metrics_uses_expected_score_bounds(monkeypatch):
+    """Queries Redis using configured key and inclusive recent-window bounds."""
+
+    fake_redis = FakeRedisRecentSpy([])
+    monkeypatch.setattr(backend_main, "get_redis", lambda: fake_redis)
+
+    client = TestClient(backend_main.app)
+    response = client.get("/api/metrics/recent")
+
+    assert response.status_code == 200
+    assert fake_redis.last_call is not None
+    assert fake_redis.last_call[0] == backend_main.METRICS_KEY
+    assert fake_redis.last_call[2] == "+inf"
+    assert isinstance(fake_redis.last_call[1], int)
+
+
+def test_ingest_metrics_rejects_total_cpu_above_100():
+    """Returns 422 when total_cpu_percent exceeds schema upper bound."""
+
+    payload = sample_payload()
+    payload["total_cpu_percent"] = 101.0
+
+    client = TestClient(backend_main.app)
+    response = client.post("/ingest/metrics", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_ingest_metrics_rejects_too_many_top_processes():
+    """Returns 422 when top_processes exceeds configured max length."""
+
+    payload = sample_payload()
+    payload["top_processes"] = [
+        {
+            "pid": index,
+            "name": f"proc-{index}",
+            "cpu_percent": 1.0,
+            "memory_mb": 10.0,
+        }
+        for index in range(6)
+    ]
+
+    client = TestClient(backend_main.app)
+    response = client.post("/ingest/metrics", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_ingest_metrics_rejects_negative_process_memory():
+    """Returns 422 when a process entry contains negative memory usage."""
+
+    payload = sample_payload()
+    payload["top_processes"][0]["memory_mb"] = -0.1
+
+    client = TestClient(backend_main.app)
+    response = client.post("/ingest/metrics", json=payload)
+
+    assert response.status_code == 422
