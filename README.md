@@ -10,6 +10,35 @@ This project aims to build a small observability stack for monitoring system met
 
 ---
 
+## Current Status (as of 2026-02-17)
+
+- Phase 1 **Agent**: Implemented in `agent/`.
+- Phase 1 **Backend**: Implemented in `backend/` with:
+  - `POST /ingest/metrics`
+  - `GET /api/metrics/recent`
+  - Redis-backed 5-minute rolling window.
+- Phase 1 **Dashboard**: Not implemented yet.
+
+---
+
+## Quick Start (Phase 1: Agent -> Backend)
+
+1. Start Redis locally (default port `6379`).
+2. Start backend:
+	- `cd backend`
+	- `python -m venv .venv`
+	- `.venv\Scripts\activate`
+	- `pip install -r requirements.txt`
+	- `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+3. Start agent from another terminal:
+	- `cd agent`
+	- build using `build.bat`
+	- run `./build/metrics_agent --backend-url http://localhost:8000 --interval 2`
+
+Backend details are documented in `backend/README.md`.
+
+---
+
 
 
 \## Architecture Overview
