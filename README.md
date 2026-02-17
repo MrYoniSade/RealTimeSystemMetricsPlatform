@@ -39,6 +39,27 @@ Backend details are documented in `backend/README.md`.
 
 ---
 
+## Quick Start (Kubernetes: Redis + Backend + Agent)
+
+Use the manifest `metrics-app.yaml` at the repository root.
+
+1. Build local Docker images:
+	- `docker build -t metrics-backend:latest ./backend`
+	- `docker build -t metrics-agent:latest ./agent`
+2. Apply Kubernetes manifest:
+	- `kubectl apply -f metrics-app.yaml`
+3. Verify workloads:
+	- `kubectl get pods`
+	- `kubectl get svc`
+4. Access backend service:
+	- If using Docker Desktop Kubernetes: open `http://localhost:8000`
+	- If using Minikube: run `minikube service backend --url`
+
+To stop/remove all resources:
+	- `kubectl delete -f metrics-app.yaml`
+
+---
+
 
 
 \## Architecture Overview

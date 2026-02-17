@@ -1,0 +1,91 @@
+# 1. REDIS DATABASE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+---
+# 2. METRICS BACKEND
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: backend
+        image: metrics-backend:latest
+        imagePullPolicy: Never # Tells K8s to use your local docker build
+        ports:
+        - containerPort: 8000
+        env:
+        - name: REDIS_HOST
+          value: "redis" # Matches the Redis Service name above
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: NodePort # This allows you to visit http://localhost:8000 on your machine
+---
+# 3. METRICS AGENT
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+spec:
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      containers:
+      - name: agent
+        image: metrics-agent:latest
+        imagePullPolicy: Never
+        # Passing your flags as arguments
+        args: ["--backend-url", "http://backend:8000", "--interval", "2"]
