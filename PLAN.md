@@ -25,16 +25,16 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [ ] Build as containerized application
 
 ### Dashboard
-- [ ] Create web interface (HTML/CSS/JavaScript)
-- [ ] Poll `/api/metrics/recent` every 2–3 seconds
-- [ ] Display line chart: Total CPU usage over time
-- [ ] Display table: Top processes (name, PID, CPU%)
-- [ ] Build as containerized application
+- [x] Create web interface (HTML/CSS/JavaScript)
+- [x] Poll `/api/metrics/recent` every 2–3 seconds
+- [x] Display line chart: Total CPU usage over time
+- [x] Display table: Top processes (name, PID, CPU%)
+- [x] Build as containerized application
 
 ### Infrastructure
 - [ ] Create Dockerfile for agent
 - [ ] Create Dockerfile for backend
-- [ ] Create Dockerfile for dashboard
+- [x] Create Dockerfile for dashboard
 - [ ] Test local Docker builds
 
 ---

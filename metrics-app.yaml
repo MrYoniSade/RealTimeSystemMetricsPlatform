@@ -89,3 +89,40 @@ spec:
         imagePullPolicy: Never
         # Passing your flags as arguments
         args: ["--backend-url", "http://backend:8000", "--interval", "2"]
+---
+# 4. DASHBOARD
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+spec:
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: dashboard
+        image: metrics-dashboard:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: BACKEND_BASE_URL
+          value: "http://backend:8000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+spec:
+  selector:
+    app: dashboard
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: NodePort # Access dashboard via http://localhost:8080 (Docker Desktop) or minikube service dashboard --url

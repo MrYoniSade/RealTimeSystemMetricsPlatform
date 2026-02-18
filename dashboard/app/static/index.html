@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>System Metrics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            background: #f5f7fb;
+            color: #101828;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+
+        p {
+            margin: 0;
+        }
+
+        .meta {
+            margin: 0 0 20px;
+            color: #475467;
+            font-size: 0.95rem;
+        }
+
+        .grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 2fr 1fr;
+        }
+
+        .card {
+            background: #ffffff;
+            border: 1px solid #e4e7ec;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 1.05rem;
+        }
+
+        .chart-wrap {
+            height: 280px;
+            width: 100%;
+            position: relative;
+        }
+
+        #cpuChart {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+
+        #status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #475467;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.92rem;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #eaecf0;
+        }
+
+        th {
+            font-weight: 600;
+            color: #344054;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .empty {
+            color: #667085;
+            font-style: italic;
+            margin-top: 8px;
+        }
+
+        @media (max-width: 960px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-Time System Metrics</h1>
+    <p class="meta">Auto-refresh every 2 seconds</p>
+
+    <div class="grid">
+        <section class="card">
+            <h2>Total CPU Usage (%)</h2>
+            <div class="chart-wrap">
+                <canvas id="cpuChart"></canvas>
+            </div>
+            <p id="status">Waiting for metrics...</p>
+        </section>
+
+        <section class="card">
+            <h2>Top Processes by CPU</h2>
+            <div id="processContainer">
+                <p class="empty">No process data yet.</p>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const POLL_INTERVAL_MS = 2000;
+        const MAX_POINTS = 150;
+
+        const statusEl = document.getElementById('status');
+        const processContainer = document.getElementById('processContainer');
+
+        const chart = new Chart(document.getElementById('cpuChart'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'CPU %',
+                    data: [],
+                    borderWidth: 2,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                    fill: true,
+                    pointRadius: 0,
+                    tension: 0.25
+                }]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'CPU %'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+
+        function formatTime(epochSeconds) {
+            return new Date(epochSeconds * 1000).toLocaleTimeString();
+        }
+
+        function renderProcesses(processes) {
+            if (!Array.isArray(processes) || processes.length === 0) {
+                processContainer.innerHTML = '<p class="empty">No process data available.</p>';
+                return;
+            }
+
+            const rows = processes
+                .map((p) => {
+                    const cpu = Number(p.cpu_percent || 0).toFixed(2);
+                    const memory = Number(p.memory_mb || 0).toFixed(2);
+                    return `<tr><td>${p.name}</td><td>${p.pid}</td><td>${cpu}</td><td>${memory}</td></tr>`;
+                })
+                .join('');
+
+            processContainer.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>PID</th>
+                            <th>CPU %</th>
+                            <th>Memory (MB)</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function updateChart(metrics) {
+            const labels = metrics.map((m) => formatTime(m.timestamp));
+            const values = metrics.map((m) => Number(m.total_cpu_percent || 0));
+
+            chart.data.labels = labels.slice(-MAX_POINTS);
+            chart.data.datasets[0].data = values.slice(-MAX_POINTS);
+            chart.update();
+        }
+
+        async function fetchMetrics() {
+            try {
+                const response = await fetch('/api/metrics/recent', { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const metrics = await response.json();
+                if (!Array.isArray(metrics) || metrics.length === 0) {
+                    statusEl.textContent = 'No recent metrics in the last 5 minutes.';
+                    renderProcesses([]);
+                    return;
+                }
+
+                updateChart(metrics);
+                renderProcesses(metrics[metrics.length - 1].top_processes || []);
+
+                const latest = metrics[metrics.length - 1];
+                statusEl.textContent = `Last update: ${formatTime(latest.timestamp)} | Current CPU: ${Number(latest.total_cpu_percent || 0).toFixed(2)}%`;
+            } catch (error) {
+                statusEl.textContent = `Failed to fetch metrics: ${error.message}`;
+            }
+        }
+
+        fetchMetrics();
+        setInterval(fetchMetrics, POLL_INTERVAL_MS);
+    </script>
+</body>
+</html>

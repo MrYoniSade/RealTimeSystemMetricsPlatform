@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <fstream>
+#include <limits>
+#include <sstream>
 #include <thread>
 #include <unordered_map>
 
@@ -34,6 +37,21 @@ bool get_total_system_cpu_time(uint64_t& total_time) {
     return true;
 }
 
+bool get_system_times(uint64_t& idle_time, uint64_t& total_time) {
+    FILETIME idle_file_time;
+    FILETIME kernel_file_time;
+    FILETIME user_file_time;
+    if (!GetSystemTimes(&idle_file_time, &kernel_file_time, &user_file_time)) {
+        idle_time = 0;
+        total_time = 0;
+        return false;
+    }
+
+    idle_time = filetime_to_uint64(idle_file_time);
+    total_time = filetime_to_uint64(kernel_file_time) + filetime_to_uint64(user_file_time);
+    return true;
+}
+
 bool get_process_cpu_time(HANDLE process_handle, uint64_t& process_time) {
     FILETIME creation_time;
     FILETIME exit_time;
@@ -45,6 +63,41 @@ bool get_process_cpu_time(HANDLE process_handle, uint64_t& process_time) {
     }
 
     process_time = filetime_to_uint64(kernel_time) + filetime_to_uint64(user_time);
+    return true;
+}
+}  // namespace
+#endif
+
+#if defined(__linux__)
+namespace {
+bool read_linux_cpu_times(uint64_t& idle_time, uint64_t& total_time) {
+    std::ifstream stat_file("/proc/stat");
+    if (!stat_file.is_open()) {
+        idle_time = 0;
+        total_time = 0;
+        return false;
+    }
+
+    std::string cpu_label;
+    uint64_t user = 0;
+    uint64_t nice = 0;
+    uint64_t system = 0;
+    uint64_t idle = 0;
+    uint64_t iowait = 0;
+    uint64_t irq = 0;
+    uint64_t softirq = 0;
+    uint64_t steal = 0;
+
+    stat_file >> cpu_label >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal;
+
+    if (!stat_file.good() || cpu_label != "cpu") {
+        idle_time = 0;
+        total_time = 0;
+        return false;
+    }
+
+    idle_time = idle + iowait;
+    total_time = user + nice + system + idle + iowait + irq + softirq + steal;
     return true;
 }
 }  // namespace
@@ -101,12 +154,76 @@ SystemMetrics MetricsCollector::collect() {
  */
 double MetricsCollector::get_total_cpu() {
 #ifdef _WIN32
-    // Use PDH (Performance Data Helper) to get CPU usage
-    // This is a simplified implementation; real-world usage would need proper error handling
-    // For now, return a placeholder value
-    return 0.0;
+    static bool has_previous = false;
+    static uint64_t previous_idle = 0;
+    static uint64_t previous_total = 0;
+
+    uint64_t current_idle = 0;
+    uint64_t current_total = 0;
+    if (!get_system_times(current_idle, current_total)) {
+        return 0.0;
+    }
+
+    if (!has_previous) {
+        has_previous = true;
+        previous_idle = current_idle;
+        previous_total = current_total;
+        return 0.0;
+    }
+
+    const uint64_t total_delta =
+        (current_total > previous_total) ? (current_total - previous_total) : 0;
+    const uint64_t idle_delta =
+        (current_idle > previous_idle) ? (current_idle - previous_idle) : 0;
+
+    previous_idle = current_idle;
+    previous_total = current_total;
+
+    if (total_delta == 0) {
+        return 0.0;
+    }
+
+    const double usage =
+        (static_cast<double>(total_delta - std::min(total_delta, idle_delta)) /
+         static_cast<double>(total_delta)) *
+        100.0;
+    return std::clamp(usage, 0.0, 100.0);
+#elif defined(__linux__)
+    static bool has_previous = false;
+    static uint64_t previous_idle = 0;
+    static uint64_t previous_total = 0;
+
+    uint64_t current_idle = 0;
+    uint64_t current_total = 0;
+    if (!read_linux_cpu_times(current_idle, current_total)) {
+        return 0.0;
+    }
+
+    if (!has_previous) {
+        has_previous = true;
+        previous_idle = current_idle;
+        previous_total = current_total;
+        return 0.0;
+    }
+
+    const uint64_t total_delta =
+        (current_total > previous_total) ? (current_total - previous_total) : 0;
+    const uint64_t idle_delta =
+        (current_idle > previous_idle) ? (current_idle - previous_idle) : 0;
+
+    previous_idle = current_idle;
+    previous_total = current_total;
+
+    if (total_delta == 0) {
+        return 0.0;
+    }
+
+    const double usage =
+        (static_cast<double>(total_delta - std::min(total_delta, idle_delta)) /
+         static_cast<double>(total_delta)) *
+        100.0;
+    return std::clamp(usage, 0.0, 100.0);
 #else
-    // Linux/macOS implementation would go here
     return 0.0;
 #endif
 }

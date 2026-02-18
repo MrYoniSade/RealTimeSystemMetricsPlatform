@@ -10,18 +10,21 @@ This project aims to build a small observability stack for monitoring system met
 
 ---
 
-## Current Status (as of 2026-02-17)
+## Current Status (as of 2026-02-18)
 
 - Phase 1 **Agent**: Implemented in `agent/`.
 - Phase 1 **Backend**: Implemented in `backend/` with:
   - `POST /ingest/metrics`
   - `GET /api/metrics/recent`
   - Redis-backed 5-minute rolling window.
-- Phase 1 **Dashboard**: Not implemented yet.
+- Phase 1 **Dashboard**: Implemented in `dashboard/` with:
+	- `GET /` dashboard UI
+	- Polling every 2 seconds via dashboard proxy endpoint
+	- Line chart for total CPU and table for top processes.
 
 ---
 
-## Quick Start (Phase 1: Agent -> Backend)
+## Quick Start (Phase 1: Agent -> Backend -> Dashboard)
 
 1. Start Redis locally (default port `6379`).
 2. Start backend:
@@ -34,18 +37,27 @@ This project aims to build a small observability stack for monitoring system met
 	- `cd agent`
 	- build using `build.bat`
 	- run `./build/metrics_agent --backend-url http://localhost:8000 --interval 2`
+4. Start dashboard from another terminal:
+	- `cd dashboard`
+	- `python -m venv .venv`
+	- `.venv\Scripts\activate`
+	- `pip install -r requirements.txt`
+	- `uvicorn app.main:app --host 0.0.0.0 --port 8080`
+	- open `http://localhost:8080`
 
 Backend details are documented in `backend/README.md`.
+Dashboard details are documented in `dashboard/README.md`.
 
 ---
 
-## Quick Start (Kubernetes: Redis + Backend + Agent)
+## Quick Start (Kubernetes: Redis + Backend + Agent + Dashboard)
 
 Use the manifest `metrics-app.yaml` at the repository root.
 
 1. Build local Docker images:
 	- `docker build -t metrics-backend:latest ./backend`
 	- `docker build -t metrics-agent:latest ./agent`
+	- `docker build -t metrics-dashboard:latest -f dashboard/Dockerfile .`
 2. Apply Kubernetes manifest:
 	- `kubectl apply -f metrics-app.yaml`
 3. Verify workloads:
@@ -54,6 +66,9 @@ Use the manifest `metrics-app.yaml` at the repository root.
 4. Access backend service:
 	- If using Docker Desktop Kubernetes: open `http://localhost:8000`
 	- If using Minikube: run `minikube service backend --url`
+5. Access dashboard service:
+	- If using Docker Desktop Kubernetes: open `http://localhost:8080`
+	- If using Minikube: run `minikube service dashboard --url`
 
 To stop/remove all resources:
 	- `kubectl delete -f metrics-app.yaml`
