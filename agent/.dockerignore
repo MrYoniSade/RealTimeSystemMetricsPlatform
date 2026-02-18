@@ -1,0 +1,12 @@
+build/
+.git/
+.vscode/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.log

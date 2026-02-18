@@ -13,16 +13,16 @@ Build a small observability stack for monitoring system metrics on a local machi
 *Goal: Establish the basic end-to-end flow*
 
 ### Agent (C++)
-- [ ] Collect total CPU usage (overall)
-- [ ] Collect top 5 processes by CPU usage
-- [ ] Send metrics as JSON via HTTP POST every 2 seconds to backend
-- [ ] Build as containerized application
+- [x] Collect total CPU usage (overall)
+- [x] Collect top 5 processes by CPU usage
+- [x] Send metrics as JSON via HTTP POST every 2 seconds to backend
+- [x] Build as containerized application
 
 ### Backend (Python/FastAPI)
-- [ ] Set up FastAPI application with Redis connection
-- [ ] Implement `/ingest/metrics` endpoint to receive and store metrics in Redis
-- [ ] Implement `/api/metrics/recent` endpoint to return last 5 minutes of data
-- [ ] Build as containerized application
+- [x] Set up FastAPI application with Redis connection
+- [x] Implement `/ingest/metrics` endpoint to receive and store metrics in Redis
+- [x] Implement `/api/metrics/recent` endpoint to return last 5 minutes of data
+- [x] Build as containerized application
 
 ### Dashboard
 - [x] Create web interface (HTML/CSS/JavaScript)
@@ -32,10 +32,10 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Build as containerized application
 
 ### Infrastructure
-- [ ] Create Dockerfile for agent
-- [ ] Create Dockerfile for backend
+- [x] Create Dockerfile for agent
+- [x] Create Dockerfile for backend
 - [x] Create Dockerfile for dashboard
-- [ ] Test local Docker builds
+- [x] Test local Docker builds
 
 ---
 
@@ -135,11 +135,11 @@ Build a small observability stack for monitoring system metrics on a local machi
 
 ## Success Criteria
 
-- [ ] Agent collects and sends metrics successfully
-- [ ] Backend ingests and stores metrics
-- [ ] Dashboard displays real-time CPU metrics
+- [x] Agent collects and sends metrics successfully
+- [x] Backend ingests and stores metrics
+- [x] Dashboard displays real-time CPU metrics
 - [ ] WebSocket provides live updates without polling
 - [ ] PostgreSQL retains historical data
-- [ ] System deploys and runs on Minikube
+- [x] System deploys and runs on Minikube
 - [ ] Alerts trigger on defined thresholds
 - [ ] System handles graceful shutdown
