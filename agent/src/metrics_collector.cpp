@@ -1,12 +1,19 @@
 #include "metrics_collector.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <sstream>
 #include <thread>
 #include <unordered_map>
+
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 
 #ifdef _WIN32
 #include <pdh.h>
@@ -99,6 +106,113 @@ bool read_linux_cpu_times(uint64_t& idle_time, uint64_t& total_time) {
     idle_time = idle + iowait;
     total_time = user + nice + system + idle + iowait + irq + softirq + steal;
     return true;
+}
+
+struct LinuxProcessSnapshot {
+    int pid;
+    std::string name;
+    uint64_t cpu_time;
+    double memory_mb;
+};
+
+bool is_numeric_text(const char* text) {
+    if (text == nullptr || *text == '\0') {
+        return false;
+    }
+
+    for (const char* current = text; *current != '\0'; ++current) {
+        if (!std::isdigit(static_cast<unsigned char>(*current))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool read_linux_process_stat(int pid, std::string& process_name, uint64_t& cpu_time, uint64_t& rss_pages) {
+    const std::string stat_path = std::string("/proc/") + std::to_string(pid) + "/stat";
+    std::ifstream stat_file(stat_path);
+    if (!stat_file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    std::getline(stat_file, line);
+    if (line.empty()) {
+        return false;
+    }
+
+    const std::size_t open_paren = line.find('(');
+    const std::size_t close_paren = line.rfind(')');
+    if (open_paren == std::string::npos || close_paren == std::string::npos || close_paren <= open_paren) {
+        return false;
+    }
+
+    process_name = line.substr(open_paren + 1, close_paren - open_paren - 1);
+
+    std::string tail = line.substr(close_paren + 2);
+    std::istringstream stream(tail);
+    std::vector<std::string> fields;
+    std::string token;
+    while (stream >> token) {
+        fields.push_back(token);
+    }
+
+    if (fields.size() < 22) {
+        return false;
+    }
+
+    try {
+        const uint64_t user_ticks = std::stoull(fields[11]);
+        const uint64_t system_ticks = std::stoull(fields[12]);
+        cpu_time = user_ticks + system_ticks;
+        rss_pages = std::stoull(fields[21]);
+    } catch (...) {
+        return false;
+    }
+
+    return true;
+}
+
+std::unordered_map<int, LinuxProcessSnapshot> collect_linux_process_snapshot() {
+    std::unordered_map<int, LinuxProcessSnapshot> snapshots;
+    snapshots.reserve(512);
+
+    const long page_size = sysconf(_SC_PAGESIZE);
+    std::error_code iter_error;
+    for (const auto& entry : std::filesystem::directory_iterator("/proc", iter_error)) {
+        if (iter_error) {
+            continue;
+        }
+
+        const std::string pid_text = entry.path().filename().string();
+        if (!is_numeric_text(pid_text.c_str())) {
+            continue;
+        }
+
+        const int pid = std::atoi(pid_text.c_str());
+        if (pid <= 0) {
+            continue;
+        }
+
+        LinuxProcessSnapshot snapshot;
+        snapshot.pid = pid;
+        snapshot.cpu_time = 0;
+        snapshot.memory_mb = 0.0;
+
+        uint64_t rss_pages = 0;
+        if (!read_linux_process_stat(pid, snapshot.name, snapshot.cpu_time, rss_pages)) {
+            continue;
+        }
+
+        if (page_size > 0) {
+            snapshot.memory_mb =
+                (static_cast<double>(rss_pages) * static_cast<double>(page_size)) / (1024.0 * 1024.0);
+        }
+
+        snapshots[pid] = std::move(snapshot);
+    }
+    return snapshots;
 }
 }  // namespace
 #endif
@@ -336,6 +450,64 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
     });
 
     // Sort by CPU and take top 5
+    if (processes.size() > 5) {
+        processes.resize(5);
+    }
+#elif defined(__linux__)
+    uint64_t system_idle_start = 0;
+    uint64_t system_total_start = 0;
+    if (!read_linux_cpu_times(system_idle_start, system_total_start)) {
+        return processes;
+    }
+
+    const auto start_snapshot = collect_linux_process_snapshot();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    uint64_t system_idle_end = 0;
+    uint64_t system_total_end = 0;
+    if (!read_linux_cpu_times(system_idle_end, system_total_end)) {
+        return processes;
+    }
+
+    const uint64_t system_total_delta =
+        (system_total_end > system_total_start) ? (system_total_end - system_total_start) : 0;
+    if (system_total_delta == 0) {
+        return processes;
+    }
+
+    const auto end_snapshot = collect_linux_process_snapshot();
+
+    processes.reserve(end_snapshot.size());
+    for (const auto& [pid, end_process] : end_snapshot) {
+        const auto start_it = start_snapshot.find(pid);
+        if (start_it == start_snapshot.end()) {
+            continue;
+        }
+
+        const uint64_t start_cpu = start_it->second.cpu_time;
+        if (end_process.cpu_time < start_cpu) {
+            continue;
+        }
+
+        const uint64_t process_delta = end_process.cpu_time - start_cpu;
+
+        ProcessMetrics proc;
+        proc.pid = pid;
+        proc.name = end_process.name;
+        proc.cpu_percent =
+            (static_cast<double>(process_delta) / static_cast<double>(system_total_delta)) * 100.0;
+        proc.memory_mb = end_process.memory_mb;
+        processes.push_back(proc);
+    }
+
+    std::sort(processes.begin(), processes.end(), [](const ProcessMetrics& left, const ProcessMetrics& right) {
+        if (left.cpu_percent != right.cpu_percent) {
+            return left.cpu_percent > right.cpu_percent;
+        }
+        return left.memory_mb > right.memory_mb;
+    });
+
     if (processes.size() > 5) {
         processes.resize(5);
     }
