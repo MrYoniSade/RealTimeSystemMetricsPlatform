@@ -11,11 +11,18 @@ class ProcessMetric(BaseModel):
     name: str
     cpu_percent: float = Field(ge=0)
     memory_mb: float = Field(ge=0)
+    thread_count: int = Field(default=0, ge=0)
+    io_read_mb: float = Field(default=0, ge=0)
+    io_write_mb: float = Field(default=0, ge=0)
+    handle_count: int = Field(default=0, ge=0)
 
 
 class MetricsPayload(BaseModel):
     timestamp: int
     total_cpu_percent: float = Field(ge=0, le=100)
+    per_core_cpu_percent: List[float] = Field(default_factory=list)
+    system_memory_total_mb: float = Field(default=0, ge=0)
+    system_memory_used_mb: float = Field(default=0, ge=0)
     top_processes: List[ProcessMetric] = Field(default_factory=list, max_length=5)
 
 

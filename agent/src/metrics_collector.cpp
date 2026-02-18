@@ -11,11 +11,32 @@
 #include <thread>
 #include <unordered_map>
 
+namespace {
+template <typename T>
+constexpr T min_value(T left, T right) {
+    return (left < right) ? left : right;
+}
+
+template <typename T>
+constexpr T max_value(T left, T right) {
+    return (left > right) ? left : right;
+}
+
+template <typename T>
+constexpr T clamp_value(T value, T low, T high) {
+    return (value < low) ? low : ((value > high) ? high : value);
+}
+}  // namespace
+
 #if defined(__linux__)
 #include <unistd.h>
+#include <sys/sysinfo.h>
 #endif
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <pdh.h>
 #include <psapi.h>
 #include <tlhelp32.h>
@@ -72,6 +93,30 @@ bool get_process_cpu_time(HANDLE process_handle, uint64_t& process_time) {
     process_time = filetime_to_uint64(kernel_time) + filetime_to_uint64(user_time);
     return true;
 }
+
+std::string process_name_to_utf8(const TCHAR* process_name) {
+#ifdef UNICODE
+    if (process_name == nullptr || *process_name == L'\0') {
+        return std::string();
+    }
+
+    const int required = WideCharToMultiByte(CP_UTF8, 0, process_name, -1, nullptr, 0, nullptr, nullptr);
+    if (required <= 1) {
+        return std::string();
+    }
+
+    std::string utf8_name(static_cast<size_t>(required), '\0');
+    const int written =
+        WideCharToMultiByte(CP_UTF8, 0, process_name, -1, utf8_name.data(), required, nullptr, nullptr);
+    if (written <= 1) {
+        return std::string();
+    }
+    utf8_name.resize(static_cast<size_t>(written - 1));
+    return utf8_name;
+#else
+    return (process_name != nullptr) ? std::string(process_name) : std::string();
+#endif
+}
 }  // namespace
 #endif
 
@@ -113,6 +158,15 @@ struct LinuxProcessSnapshot {
     std::string name;
     uint64_t cpu_time;
     double memory_mb;
+    int thread_count;
+    double io_read_mb;
+    double io_write_mb;
+    int handle_count;
+};
+
+struct LinuxCpuTimes {
+    uint64_t idle_time;
+    uint64_t total_time;
 };
 
 bool is_numeric_text(const char* text) {
@@ -174,6 +228,109 @@ bool read_linux_process_stat(int pid, std::string& process_name, uint64_t& cpu_t
     return true;
 }
 
+bool read_linux_process_status_fields(int pid, int& thread_count, int& handle_count) {
+    thread_count = 0;
+    handle_count = 0;
+
+    const std::string status_path = std::string("/proc/") + std::to_string(pid) + "/status";
+    std::ifstream status_file(status_path);
+    if (!status_file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(status_file, line)) {
+        if (line.rfind("Threads:", 0) == 0) {
+            std::istringstream parser(line.substr(8));
+            parser >> thread_count;
+            break;
+        }
+    }
+
+    std::error_code fd_error;
+    const auto fd_dir = std::filesystem::path("/proc") / std::to_string(pid) / "fd";
+    int fd_count = 0;
+    for (const auto& _ : std::filesystem::directory_iterator(fd_dir, fd_error)) {
+        (void)_;
+        if (fd_error) {
+            break;
+        }
+        ++fd_count;
+    }
+    if (!fd_error) {
+        handle_count = fd_count;
+    }
+
+    return true;
+}
+
+bool read_linux_process_io(int pid, double& io_read_mb, double& io_write_mb) {
+    io_read_mb = 0.0;
+    io_write_mb = 0.0;
+
+    const std::string io_path = std::string("/proc/") + std::to_string(pid) + "/io";
+    std::ifstream io_file(io_path);
+    if (!io_file.is_open()) {
+        return false;
+    }
+
+    uint64_t read_bytes = 0;
+    uint64_t write_bytes = 0;
+    std::string key;
+    uint64_t value = 0;
+
+    while (io_file >> key >> value) {
+        if (key == "read_bytes:") {
+            read_bytes = value;
+        } else if (key == "write_bytes:") {
+            write_bytes = value;
+        }
+    }
+
+    io_read_mb = static_cast<double>(read_bytes) / (1024.0 * 1024.0);
+    io_write_mb = static_cast<double>(write_bytes) / (1024.0 * 1024.0);
+    return true;
+}
+
+bool read_linux_per_core_cpu_times(std::vector<LinuxCpuTimes>& core_times) {
+    core_times.clear();
+
+    std::ifstream stat_file("/proc/stat");
+    if (!stat_file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(stat_file, line)) {
+        if (line.rfind("cpu", 0) != 0 || (line.size() > 3 && !std::isdigit(static_cast<unsigned char>(line[3])))) {
+            continue;
+        }
+
+        std::istringstream parser(line);
+        std::string label;
+        uint64_t user = 0;
+        uint64_t nice = 0;
+        uint64_t system = 0;
+        uint64_t idle = 0;
+        uint64_t iowait = 0;
+        uint64_t irq = 0;
+        uint64_t softirq = 0;
+        uint64_t steal = 0;
+
+        parser >> label >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal;
+        if (!parser.good() && !parser.eof()) {
+            continue;
+        }
+
+        LinuxCpuTimes times;
+        times.idle_time = idle + iowait;
+        times.total_time = user + nice + system + idle + iowait + irq + softirq + steal;
+        core_times.push_back(times);
+    }
+
+    return !core_times.empty();
+}
+
 std::unordered_map<int, LinuxProcessSnapshot> collect_linux_process_snapshot() {
     std::unordered_map<int, LinuxProcessSnapshot> snapshots;
     snapshots.reserve(512);
@@ -199,6 +356,10 @@ std::unordered_map<int, LinuxProcessSnapshot> collect_linux_process_snapshot() {
         snapshot.pid = pid;
         snapshot.cpu_time = 0;
         snapshot.memory_mb = 0.0;
+        snapshot.thread_count = 0;
+        snapshot.io_read_mb = 0.0;
+        snapshot.io_write_mb = 0.0;
+        snapshot.handle_count = 0;
 
         uint64_t rss_pages = 0;
         if (!read_linux_process_stat(pid, snapshot.name, snapshot.cpu_time, rss_pages)) {
@@ -209,6 +370,9 @@ std::unordered_map<int, LinuxProcessSnapshot> collect_linux_process_snapshot() {
             snapshot.memory_mb =
                 (static_cast<double>(rss_pages) * static_cast<double>(page_size)) / (1024.0 * 1024.0);
         }
+
+        read_linux_process_status_fields(pid, snapshot.thread_count, snapshot.handle_count);
+        read_linux_process_io(pid, snapshot.io_read_mb, snapshot.io_write_mb);
 
         snapshots[pid] = std::move(snapshot);
     }
@@ -253,8 +417,108 @@ SystemMetrics MetricsCollector::collect() {
     SystemMetrics metrics;
     metrics.timestamp = time(nullptr);
     metrics.total_cpu_percent = get_total_cpu();
+    metrics.per_core_cpu_percent = get_per_core_cpu();
+    const auto [memory_total_mb, memory_used_mb] = get_system_memory();
+    metrics.system_memory_total_mb = memory_total_mb;
+    metrics.system_memory_used_mb = memory_used_mb;
     metrics.top_processes = get_top_processes();
     return metrics;
+}
+
+std::vector<double> MetricsCollector::get_per_core_cpu() {
+    std::vector<double> per_core_cpu;
+
+#ifdef _WIN32
+    SYSTEM_INFO system_info;
+    GetSystemInfo(&system_info);
+    if (system_info.dwNumberOfProcessors > 0) {
+        per_core_cpu.assign(static_cast<size_t>(system_info.dwNumberOfProcessors), 0.0);
+    }
+#elif defined(__linux__)
+    static bool has_previous = false;
+    static std::vector<LinuxCpuTimes> previous_core_times;
+
+    std::vector<LinuxCpuTimes> current_core_times;
+    if (!read_linux_per_core_cpu_times(current_core_times)) {
+        return per_core_cpu;
+    }
+
+    if (!has_previous) {
+        has_previous = true;
+        previous_core_times = current_core_times;
+        per_core_cpu.assign(current_core_times.size(), 0.0);
+        return per_core_cpu;
+    }
+
+    const size_t core_count = min_value(previous_core_times.size(), current_core_times.size());
+    per_core_cpu.reserve(core_count);
+    for (size_t index = 0; index < core_count; ++index) {
+        const auto& previous = previous_core_times[index];
+        const auto& current = current_core_times[index];
+
+        const uint64_t total_delta =
+            (current.total_time > previous.total_time) ? (current.total_time - previous.total_time) : 0;
+        const uint64_t idle_delta =
+            (current.idle_time > previous.idle_time) ? (current.idle_time - previous.idle_time) : 0;
+
+        double usage = 0.0;
+        if (total_delta > 0) {
+            usage =
+                (static_cast<double>(total_delta - min_value(total_delta, idle_delta)) /
+                 static_cast<double>(total_delta)) *
+                100.0;
+        }
+
+            per_core_cpu.push_back(clamp_value(usage, 0.0, 100.0));
+    }
+
+    previous_core_times = std::move(current_core_times);
+#endif
+
+    return per_core_cpu;
+}
+
+std::pair<double, double> MetricsCollector::get_system_memory() {
+#ifdef _WIN32
+    MEMORYSTATUSEX memory_status;
+    std::memset(&memory_status, 0, sizeof(memory_status));
+    memory_status.dwLength = sizeof(memory_status);
+
+    if (!GlobalMemoryStatusEx(&memory_status)) {
+        return {0.0, 0.0};
+    }
+
+    const double total_mb = static_cast<double>(memory_status.ullTotalPhys) / (1024.0 * 1024.0);
+    const double available_mb = static_cast<double>(memory_status.ullAvailPhys) / (1024.0 * 1024.0);
+    const double used_mb = max_value(0.0, total_mb - available_mb);
+    return {total_mb, used_mb};
+#elif defined(__linux__)
+    std::ifstream meminfo_file("/proc/meminfo");
+    if (!meminfo_file.is_open()) {
+        return {0.0, 0.0};
+    }
+
+    uint64_t mem_total_kb = 0;
+    uint64_t mem_available_kb = 0;
+    std::string key;
+    uint64_t value = 0;
+    std::string unit;
+
+    while (meminfo_file >> key >> value >> unit) {
+        if (key == "MemTotal:") {
+            mem_total_kb = value;
+        } else if (key == "MemAvailable:") {
+            mem_available_kb = value;
+        }
+    }
+
+    const double total_mb = static_cast<double>(mem_total_kb) / 1024.0;
+    const double available_mb = static_cast<double>(mem_available_kb) / 1024.0;
+    const double used_mb = max_value(0.0, total_mb - available_mb);
+    return {total_mb, used_mb};
+#else
+    return {0.0, 0.0};
+#endif
 }
 
 /**
@@ -298,10 +562,10 @@ double MetricsCollector::get_total_cpu() {
     }
 
     const double usage =
-        (static_cast<double>(total_delta - std::min(total_delta, idle_delta)) /
+        (static_cast<double>(total_delta - min_value(total_delta, idle_delta)) /
          static_cast<double>(total_delta)) *
         100.0;
-    return std::clamp(usage, 0.0, 100.0);
+    return clamp_value(usage, 0.0, 100.0);
 #elif defined(__linux__)
     static bool has_previous = false;
     static uint64_t previous_idle = 0;
@@ -333,10 +597,10 @@ double MetricsCollector::get_total_cpu() {
     }
 
     const double usage =
-        (static_cast<double>(total_delta - std::min(total_delta, idle_delta)) /
+        (static_cast<double>(total_delta - min_value(total_delta, idle_delta)) /
          static_cast<double>(total_delta)) *
         100.0;
-    return std::clamp(usage, 0.0, 100.0);
+    return clamp_value(usage, 0.0, 100.0);
 #else
     return 0.0;
 #endif
@@ -375,9 +639,13 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
         do {
             ProcessMetrics proc;
             proc.pid = entry.th32ProcessID;
-            proc.name = std::string(entry.szExeFile);
+            proc.name = process_name_to_utf8(entry.szExeFile);
             proc.cpu_percent = 0.0;
             proc.memory_mb = 0.0;
+            proc.thread_count = static_cast<int>(entry.cntThreads);
+            proc.io_read_mb = 0.0;
+            proc.io_write_mb = 0.0;
+            proc.handle_count = 0;
 
             HANDLE process_handle = OpenProcess(
                 PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
@@ -439,6 +707,18 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
                 static_cast<double>(memory_counters.WorkingSetSize) / (1024.0 * 1024.0);
         }
 
+        IO_COUNTERS io_counters;
+        std::memset(&io_counters, 0, sizeof(io_counters));
+        if (GetProcessIoCounters(process_handle, &io_counters)) {
+            proc.io_read_mb = static_cast<double>(io_counters.ReadTransferCount) / (1024.0 * 1024.0);
+            proc.io_write_mb = static_cast<double>(io_counters.WriteTransferCount) / (1024.0 * 1024.0);
+        }
+
+        DWORD handle_count = 0;
+        if (GetProcessHandleCount(process_handle, &handle_count)) {
+            proc.handle_count = static_cast<int>(handle_count);
+        }
+
         CloseHandle(process_handle);
     }
 
@@ -498,6 +778,10 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
         proc.cpu_percent =
             (static_cast<double>(process_delta) / static_cast<double>(system_total_delta)) * 100.0;
         proc.memory_mb = end_process.memory_mb;
+        proc.thread_count = end_process.thread_count;
+        proc.io_read_mb = end_process.io_read_mb;
+        proc.io_write_mb = end_process.io_write_mb;
+        proc.handle_count = end_process.handle_count;
         processes.push_back(proc);
     }
 

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include <utility>
 
 /**
  * @struct ProcessMetrics
@@ -16,6 +17,10 @@ struct ProcessMetrics {
     std::string name; ///< Name of the process.
     double cpu_percent; ///< CPU usage percentage of the process.
     double memory_mb; ///< Memory usage of the process in MB.
+    int thread_count; ///< Number of threads in the process.
+    double io_read_mb; ///< Process read I/O volume in MB.
+    double io_write_mb; ///< Process write I/O volume in MB.
+    int handle_count; ///< Number of process handles (or file descriptors on Linux).
 };
 
 /**
@@ -28,6 +33,9 @@ struct ProcessMetrics {
 struct SystemMetrics {
     time_t timestamp; ///< Timestamp of when the metrics were collected.
     double total_cpu_percent; ///< Total CPU usage percentage.
+    std::vector<double> per_core_cpu_percent; ///< CPU usage percentage per core.
+    double system_memory_total_mb; ///< Total system memory in MB.
+    double system_memory_used_mb; ///< Used system memory in MB.
     std::vector<ProcessMetrics> top_processes; ///< List of top processes by resource usage.
 };
 
@@ -71,6 +79,18 @@ private:
      * @return The total CPU usage percentage.
      */
     double get_total_cpu();
+
+    /**
+     * @brief Retrieves per-core CPU usage percentages.
+     * @return A vector containing CPU usage percentage for each core.
+     */
+    std::vector<double> get_per_core_cpu();
+
+    /**
+     * @brief Retrieves total and used system memory in MB.
+     * @return A pair of (total_mb, used_mb).
+     */
+    std::pair<double, double> get_system_memory();
 
     /**
      * @brief Retrieves information about the top resource-consuming processes.

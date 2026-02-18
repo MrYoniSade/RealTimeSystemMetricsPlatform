@@ -43,11 +43,11 @@ Build a small observability stack for monitoring system metrics on a local machi
 *Goal: Add WebSocket support and expand metrics*
 
 ### Agent (C++)
-- [ ] Collect per-core CPU usage
-- [ ] Collect memory usage (per-process and system)
-- [ ] Collect thread count
-- [ ] Collect I/O metrics
-- [ ] Collect handles
+- [x] Collect per-core CPU usage
+- [x] Collect memory usage (per-process and system)
+- [x] Collect thread count
+- [x] Collect I/O metrics
+- [x] Collect handles
 
 ### Backend (Python/FastAPI)
 - [ ] Implement WebSocket endpoint for real-time updates

@@ -56,6 +56,16 @@ std::string HttpClient::metrics_to_json(const SystemMetrics& metrics) {
     json << "{";
     json << "\"timestamp\":" << metrics.timestamp << ",";
     json << "\"total_cpu_percent\":" << std::fixed << std::setprecision(2) << metrics.total_cpu_percent << ",";
+    json << "\"per_core_cpu_percent\":[";
+    for (size_t index = 0; index < metrics.per_core_cpu_percent.size(); ++index) {
+        json << std::fixed << std::setprecision(2) << metrics.per_core_cpu_percent[index];
+        if (index < metrics.per_core_cpu_percent.size() - 1) {
+            json << ",";
+        }
+    }
+    json << "],";
+    json << "\"system_memory_total_mb\":" << std::fixed << std::setprecision(2) << metrics.system_memory_total_mb << ",";
+    json << "\"system_memory_used_mb\":" << std::fixed << std::setprecision(2) << metrics.system_memory_used_mb << ",";
     json << "\"top_processes\":[";
     
     for (size_t i = 0; i < metrics.top_processes.size(); ++i) {
@@ -64,7 +74,11 @@ std::string HttpClient::metrics_to_json(const SystemMetrics& metrics) {
         json << "\"pid\":" << proc.pid << ",";
         json << "\"name\":\"" << proc.name << "\",";
         json << "\"cpu_percent\":" << std::fixed << std::setprecision(2) << proc.cpu_percent << ",";
-        json << "\"memory_mb\":" << std::fixed << std::setprecision(2) << proc.memory_mb;
+        json << "\"memory_mb\":" << std::fixed << std::setprecision(2) << proc.memory_mb << ",";
+        json << "\"thread_count\":" << proc.thread_count << ",";
+        json << "\"io_read_mb\":" << std::fixed << std::setprecision(2) << proc.io_read_mb << ",";
+        json << "\"io_write_mb\":" << std::fixed << std::setprecision(2) << proc.io_write_mb << ",";
+        json << "\"handle_count\":" << proc.handle_count;
         json << "}";
         
         if (i < metrics.top_processes.size() - 1) {
