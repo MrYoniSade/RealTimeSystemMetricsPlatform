@@ -75,12 +75,12 @@ Build a small observability stack for monitoring system metrics on a local machi
 *Goal: Production-ready system with advanced capabilities*
 
 ### Agent (C++)
-- [ ] Implement multi-threaded architecture (separate collection and sending)
-- [ ] Add JSON/YAML configuration file support
-- [ ] Make sampling intervals configurable
-- [ ] Allow selection of which metrics to collect
-- [ ] Implement graceful shutdown (signal handling)
-- [ ] Add structured logging
+- [x] Implement multi-threaded architecture (separate collection and sending)
+- [x] Add JSON/YAML configuration file support
+- [x] Make sampling intervals configurable
+- [x] Allow selection of which metrics to collect
+- [x] Implement graceful shutdown (signal handling)
+- [x] Add structured logging
 
 ### Backend (Python/FastAPI)
 - [ ] Implement rate limiting for agent connections

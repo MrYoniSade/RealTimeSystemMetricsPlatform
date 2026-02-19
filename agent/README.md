@@ -7,6 +7,10 @@ The C++ component responsible for collecting system metrics and sending them to 
 - Collects total CPU usage (overall)
 - Collects top 5 processes by CPU usage
 - Sends metrics as JSON via HTTP POST every 2 seconds (configurable)
+- Multi-threaded runtime (separate collector and sender threads)
+- JSON/YAML config file support
+- Selectable metric groups (CPU, memory, process-level metrics)
+- Structured JSON logging
 - Graceful shutdown on SIGINT/SIGTERM
 - Cross-platform (Windows, Linux, macOS)
 
@@ -42,9 +46,55 @@ Run without a backend:
 - `--backend-url`: URL of the backend service (default: http://localhost:8000)
 - `--interval`: Collection interval in seconds (default: 2)
 - `--no-backend`: Disables HTTP sending and only logs collected metrics
+- `--config`: Path to JSON or YAML config file
+- `--metrics`: Comma-separated metric selectors (`all`, `total_cpu`, `per_core_cpu`, `system_memory`, `top_processes`, `process_threads`, `process_io`, `process_handles`)
 
 Environment variable support:
 - `BACKEND_URL`: Used as the default backend URL when provided. `--backend-url` still overrides it.
+- `AGENT_CONFIG`: Optional config file path. `--config` overrides it.
+
+### Config file (JSON/YAML)
+
+Example JSON:
+
+```json
+{
+  "backend_url": "http://localhost:8000",
+  "backend_enabled": true,
+  "interval_seconds": 2,
+  "queue_capacity": 32,
+  "metrics": {
+    "total_cpu": true,
+    "per_core_cpu": true,
+    "system_memory": true,
+    "top_processes": true,
+    "process_threads": true,
+    "process_io": true,
+    "process_handles": true
+  }
+}
+```
+
+Example YAML:
+
+```yaml
+backend_url: http://localhost:8000
+backend_enabled: true
+interval_seconds: 2
+queue_capacity: 32
+metrics:
+  total_cpu: true
+  per_core_cpu: true
+  system_memory: true
+  top_processes: true
+  process_threads: true
+  process_io: true
+  process_handles: true
+```
+
+### Structured logs
+
+The agent emits line-delimited JSON logs with fields such as `ts`, `level`, `event`, and `message`.
 
 Note on hostnames:
 - `http://backend:8000` works inside container/Kubernetes networking.
@@ -79,8 +129,9 @@ docker run --rm metrics-agent:latest --backend-url http://backend:8000 --interva
   - Converts metrics to JSON format
   
 - **main.cpp**: Entry point and main loop
-  - Manages collection intervals
-  - Handles graceful shutdown
+  - Runs a producer/consumer threaded pipeline
+  - Loads runtime config and metric selection
+  - Handles graceful shutdown and structured logging
 
 ## Metrics Format
 

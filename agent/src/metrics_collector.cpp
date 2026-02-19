@@ -387,7 +387,8 @@ std::unordered_map<int, LinuxProcessSnapshot> collect_linux_process_snapshot() {
  * Initializes platform-specific resources required for collecting system metrics.
  * On Windows, this includes initializing PDH (Performance Data Helper) resources.
  */
-MetricsCollector::MetricsCollector() {
+MetricsCollector::MetricsCollector(const MetricsSelection& selection)
+    : selection_(selection) {
 #ifdef _WIN32
     initialize_pdh();
 #endif
@@ -416,12 +417,30 @@ MetricsCollector::~MetricsCollector() {
 SystemMetrics MetricsCollector::collect() {
     SystemMetrics metrics;
     metrics.timestamp = time(nullptr);
-    metrics.total_cpu_percent = get_total_cpu();
-    metrics.per_core_cpu_percent = get_per_core_cpu();
-    const auto [memory_total_mb, memory_used_mb] = get_system_memory();
-    metrics.system_memory_total_mb = memory_total_mb;
-    metrics.system_memory_used_mb = memory_used_mb;
-    metrics.top_processes = get_top_processes();
+
+    if (selection_.total_cpu) {
+        metrics.total_cpu_percent = get_total_cpu();
+    } else {
+        metrics.total_cpu_percent = 0.0;
+    }
+
+    if (selection_.per_core_cpu) {
+        metrics.per_core_cpu_percent = get_per_core_cpu();
+    }
+
+    if (selection_.system_memory) {
+        const auto [memory_total_mb, memory_used_mb] = get_system_memory();
+        metrics.system_memory_total_mb = memory_total_mb;
+        metrics.system_memory_used_mb = memory_used_mb;
+    } else {
+        metrics.system_memory_total_mb = 0.0;
+        metrics.system_memory_used_mb = 0.0;
+    }
+
+    if (selection_.top_processes) {
+        metrics.top_processes = get_top_processes();
+    }
+
     return metrics;
 }
 
@@ -642,7 +661,7 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
             proc.name = process_name_to_utf8(entry.szExeFile);
             proc.cpu_percent = 0.0;
             proc.memory_mb = 0.0;
-            proc.thread_count = static_cast<int>(entry.cntThreads);
+            proc.thread_count = selection_.process_threads ? static_cast<int>(entry.cntThreads) : 0;
             proc.io_read_mb = 0.0;
             proc.io_write_mb = 0.0;
             proc.handle_count = 0;
@@ -707,16 +726,20 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
                 static_cast<double>(memory_counters.WorkingSetSize) / (1024.0 * 1024.0);
         }
 
-        IO_COUNTERS io_counters;
-        std::memset(&io_counters, 0, sizeof(io_counters));
-        if (GetProcessIoCounters(process_handle, &io_counters)) {
-            proc.io_read_mb = static_cast<double>(io_counters.ReadTransferCount) / (1024.0 * 1024.0);
-            proc.io_write_mb = static_cast<double>(io_counters.WriteTransferCount) / (1024.0 * 1024.0);
+        if (selection_.process_io) {
+            IO_COUNTERS io_counters;
+            std::memset(&io_counters, 0, sizeof(io_counters));
+            if (GetProcessIoCounters(process_handle, &io_counters)) {
+                proc.io_read_mb = static_cast<double>(io_counters.ReadTransferCount) / (1024.0 * 1024.0);
+                proc.io_write_mb = static_cast<double>(io_counters.WriteTransferCount) / (1024.0 * 1024.0);
+            }
         }
 
-        DWORD handle_count = 0;
-        if (GetProcessHandleCount(process_handle, &handle_count)) {
-            proc.handle_count = static_cast<int>(handle_count);
+        if (selection_.process_handles) {
+            DWORD handle_count = 0;
+            if (GetProcessHandleCount(process_handle, &handle_count)) {
+                proc.handle_count = static_cast<int>(handle_count);
+            }
         }
 
         CloseHandle(process_handle);
@@ -782,6 +805,18 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
         proc.io_read_mb = end_process.io_read_mb;
         proc.io_write_mb = end_process.io_write_mb;
         proc.handle_count = end_process.handle_count;
+
+        if (!selection_.process_threads) {
+            proc.thread_count = 0;
+        }
+        if (!selection_.process_io) {
+            proc.io_read_mb = 0.0;
+            proc.io_write_mb = 0.0;
+        }
+        if (!selection_.process_handles) {
+            proc.handle_count = 0;
+        }
+
         processes.push_back(proc);
     }
 

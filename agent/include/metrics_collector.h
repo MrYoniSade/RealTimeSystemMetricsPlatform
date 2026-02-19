@@ -39,6 +39,16 @@ struct SystemMetrics {
     std::vector<ProcessMetrics> top_processes; ///< List of top processes by resource usage.
 };
 
+struct MetricsSelection {
+    bool total_cpu = true;
+    bool per_core_cpu = true;
+    bool system_memory = true;
+    bool top_processes = true;
+    bool process_threads = true;
+    bool process_io = true;
+    bool process_handles = true;
+};
+
 /**
  * @class MetricsCollector
  * @brief Collects system metrics, including CPU usage and process information.
@@ -55,7 +65,7 @@ public:
      * Initializes any platform-specific resources required for
      * collecting metrics.
      */
-    MetricsCollector();
+    explicit MetricsCollector(const MetricsSelection& selection = {});
 
     /**
      * @brief Destructor for the MetricsCollector class.
@@ -97,6 +107,8 @@ private:
      * @return A vector of ProcessMetrics objects representing the top processes.
      */
     std::vector<ProcessMetrics> get_top_processes();
+
+    MetricsSelection selection_;
 
 #ifdef _WIN32
     /**

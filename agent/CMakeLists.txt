@@ -25,6 +25,8 @@ set(SOURCES
     src/main.cpp
     src/metrics_collector.cpp
     src/http_client.cpp
+    src/agent_config.cpp
+    src/structured_logger.cpp
 )
 
 # Build the main executable target
