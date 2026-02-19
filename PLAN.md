@@ -91,11 +91,11 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Add API documentation (OpenAPI/Swagger)
 
 ### Dashboard
-- [ ] Add alert status display
-- [ ] Add alert history/logs
-- [ ] Add configuration UI
-- [ ] Add performance metrics for backend
-- [ ] Implement user authentication
+- [x] Add alert status display
+- [x] Add alert history/logs
+- [x] Add configuration UI
+- [x] Add performance metrics for backend
+- [x] Implement user authentication
 
 ### Infrastructure
 - [ ] Create Kubernetes Deployment manifests for backend

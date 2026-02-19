@@ -18,8 +18,16 @@
             color: #101828;
         }
 
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
         h1 {
-            margin: 0 0 8px;
+            margin: 0;
             font-size: 1.6rem;
             font-weight: 700;
         }
@@ -32,6 +40,20 @@
             margin: 0 0 20px;
             color: #475467;
             font-size: 0.95rem;
+        }
+
+        .btn {
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+            color: #344054;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.88rem;
+        }
+
+        .btn:hover {
+            background: #f9fafb;
         }
 
         .grid {
@@ -51,6 +73,36 @@
         .card h2 {
             margin: 0 0 12px;
             font-size: 1.05rem;
+        }
+
+        .meta-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #475467;
+            margin-bottom: 8px;
+        }
+
+        .chip {
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #d0d5dd;
+            font-size: 0.8rem;
+            color: #344054;
+            background: #f9fafb;
+        }
+
+        .chip.warn {
+            border-color: #fdba74;
+            color: #b45309;
+            background: #fff7ed;
+        }
+
+        .chip.good {
+            border-color: #86efac;
+            color: #166534;
+            background: #f0fdf4;
         }
 
         .chart-wrap {
@@ -74,6 +126,37 @@
             margin-top: 10px;
             font-size: 0.9rem;
             color: #475467;
+        }
+
+        .kv {
+            display: grid;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .kv div {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .form-grid label {
+            font-size: 0.88rem;
+            color: #344054;
+            display: grid;
+            gap: 6px;
+        }
+
+        .form-grid input {
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 0.9rem;
         }
 
         table {
@@ -108,89 +191,116 @@
                 grid-template-columns: 1fr;
             }
         }
-
-        .meta-line {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9rem;
-            color: #475467;
-            margin-bottom: 8px;
-        }
-
-        .chip {
-            padding: 2px 8px;
-            border-radius: 999px;
-            border: 1px solid #d0d5dd;
-            font-size: 0.8rem;
-            color: #344054;
-            background: #f9fafb;
-        }
     </style>
 </head>
 <body>
-    <h1>Real-Time System Metrics</h1>
-    <p class="meta">Live updates via WebSocket</p>
+    <div class="topbar">
+        <h1>Real-Time System Metrics</h1>
+        <button id="logoutBtn" class="btn">Logout</button>
+    </div>
+    <p class="meta">Live updates via WebSocket + Phase 3 alerting and control panel</p>
 
     <div class="grid">
         <section class="card">
             <div class="meta-line"><h2>Total CPU Usage (%)</h2><span id="connectionState" class="chip">connecting</span></div>
-            <div class="chart-wrap">
-                <canvas id="cpuChart"></canvas>
-            </div>
+            <div class="chart-wrap"><canvas id="cpuChart"></canvas></div>
             <p id="status">Waiting for metrics...</p>
         </section>
 
         <section class="card">
-            <h2>Per-Core CPU Usage (%)</h2>
-            <div class="chart-wrap">
-                <canvas id="perCoreChart"></canvas>
+            <div class="meta-line"><h2>Backend Performance</h2><span id="backendStatusChip" class="chip">checking</span></div>
+            <div class="kv" id="backendPerf">
+                <div><span>Latency</span><strong id="backendLatency">-</strong></div>
+                <div><span>Backend Status</span><strong id="backendStatus">-</strong></div>
+                <div><span>Redis</span><strong id="backendRedis">-</strong></div>
+                <div><span>PostgreSQL</span><strong id="backendPostgres">-</strong></div>
             </div>
+        </section>
+
+        <section class="card">
+            <div class="meta-line"><h2>Alert Status</h2><span id="alertStatusChip" class="chip good">clear</span></div>
+            <p id="alertStatusText" class="meta">No active alerts in the selected time window.</p>
+        </section>
+
+        <section class="card">
+            <h2>Configuration</h2>
+            <form id="configForm" class="form-grid">
+                <label>Chart max points
+                    <input id="cfgMaxPoints" type="number" min="30" max="1000" required />
+                </label>
+                <label>Alert history window (minutes)
+                    <input id="cfgAlertMinutes" type="number" min="1" max="1440" required />
+                </label>
+                <label>Backend perf poll interval (seconds)
+                    <input id="cfgPerfSeconds" type="number" min="2" max="300" required />
+                </label>
+                <button class="btn" type="submit">Save Configuration</button>
+                <p id="configStatus" class="meta"></p>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Per-Core CPU Usage (%)</h2>
+            <div class="chart-wrap"><canvas id="perCoreChart"></canvas></div>
         </section>
 
         <section class="card">
             <h2>System Memory (MB)</h2>
-            <div class="chart-wrap">
-                <canvas id="memoryChart"></canvas>
-            </div>
+            <div class="chart-wrap"><canvas id="memoryChart"></canvas></div>
         </section>
 
         <section class="card">
             <h2>Total Thread Count</h2>
-            <div class="chart-wrap">
-                <canvas id="threadChart"></canvas>
-            </div>
+            <div class="chart-wrap"><canvas id="threadChart"></canvas></div>
         </section>
 
         <section class="card">
             <h2>Process I/O (MB)</h2>
-            <div class="chart-wrap">
-                <canvas id="ioChart"></canvas>
-            </div>
+            <div class="chart-wrap"><canvas id="ioChart"></canvas></div>
         </section>
 
         <section class="card">
             <h2>Process Handles</h2>
-            <div class="chart-wrap">
-                <canvas id="handlesChart"></canvas>
-            </div>
+            <div class="chart-wrap"><canvas id="handlesChart"></canvas></div>
         </section>
 
         <section class="card" style="grid-column: 1 / -1;">
             <h2>Top Processes by CPU</h2>
-            <div id="processContainer">
-                <p class="empty">No process data yet.</p>
-            </div>
+            <div id="processContainer"><p class="empty">No process data yet.</p></div>
+        </section>
+
+        <section class="card" style="grid-column: 1 / -1;">
+            <h2>Alert History</h2>
+            <div id="alertHistoryContainer"><p class="empty">No alerts in window.</p></div>
         </section>
     </div>
 
     <script>
-        const MAX_POINTS = 150;
-        const RECONNECT_DELAY_MS = 2000;
+        let maxPoints = 150;
+        let alertsWindowMinutes = 60;
+        let perfPollSeconds = 5;
+        const reconnectDelayMs = 2000;
 
         const statusEl = document.getElementById('status');
         const processContainer = document.getElementById('processContainer');
         const connectionState = document.getElementById('connectionState');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        const backendStatusChip = document.getElementById('backendStatusChip');
+        const backendLatency = document.getElementById('backendLatency');
+        const backendStatus = document.getElementById('backendStatus');
+        const backendRedis = document.getElementById('backendRedis');
+        const backendPostgres = document.getElementById('backendPostgres');
+
+        const alertStatusChip = document.getElementById('alertStatusChip');
+        const alertStatusText = document.getElementById('alertStatusText');
+        const alertHistoryContainer = document.getElementById('alertHistoryContainer');
+
+        const configForm = document.getElementById('configForm');
+        const cfgMaxPoints = document.getElementById('cfgMaxPoints');
+        const cfgAlertMinutes = document.getElementById('cfgAlertMinutes');
+        const cfgPerfSeconds = document.getElementById('cfgPerfSeconds');
+        const configStatus = document.getElementById('configStatus');
 
         const labels = [];
         const totalCpuSeries = [];
@@ -203,63 +313,18 @@
 
         const coreSeries = [];
         const coreDatasets = [];
+        let perfPollTimer = null;
 
         const chart = new Chart(document.getElementById('cpuChart'), {
             type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'CPU %',
-                    data: totalCpuSeries,
-                    borderWidth: 2,
-                    borderColor: '#2563eb',
-                    backgroundColor: 'rgba(37, 99, 235, 0.12)',
-                    fill: true,
-                    pointRadius: 0,
-                    tension: 0.25
-                }]
-            },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        min: 0,
-                        max: 100,
-                        title: {
-                            display: true,
-                            text: 'CPU %'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Time'
-                        }
-                    }
-                }
-            }
+            data: { labels, datasets: [{ label: 'CPU %', data: totalCpuSeries, borderWidth: 2, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.12)', fill: true, pointRadius: 0, tension: 0.25 }] },
+            options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
         });
 
         const perCoreChart = new Chart(document.getElementById('perCoreChart'), {
             type: 'line',
-            data: {
-                labels,
-                datasets: coreDatasets
-            },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        min: 0,
-                        max: 100,
-                        title: { display: true, text: 'CPU %' }
-                    }
-                }
-            }
+            data: { labels, datasets: coreDatasets },
+            options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
         });
 
         const memoryChart = new Chart(document.getElementById('memoryChart'), {
@@ -267,54 +332,17 @@
             data: {
                 labels,
                 datasets: [
-                    {
-                        label: 'Used Memory (MB)',
-                        data: usedMemorySeries,
-                        borderWidth: 2,
-                        borderColor: '#059669',
-                        backgroundColor: 'rgba(5, 150, 105, 0.12)',
-                        pointRadius: 0,
-                        tension: 0.25
-                    },
-                    {
-                        label: 'Total Memory (MB)',
-                        data: totalMemorySeries,
-                        borderWidth: 2,
-                        borderColor: '#94a3b8',
-                        pointRadius: 0,
-                        tension: 0.25
-                    }
+                    { label: 'Used Memory (MB)', data: usedMemorySeries, borderWidth: 2, borderColor: '#059669', backgroundColor: 'rgba(5, 150, 105, 0.12)', pointRadius: 0, tension: 0.25 },
+                    { label: 'Total Memory (MB)', data: totalMemorySeries, borderWidth: 2, borderColor: '#94a3b8', pointRadius: 0, tension: 0.25 }
                 ]
             },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false
-            }
+            options: { animation: false, responsive: true, maintainAspectRatio: false }
         });
 
         const threadChart = new Chart(document.getElementById('threadChart'), {
             type: 'line',
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: 'Threads',
-                        data: threadSeries,
-                        borderWidth: 2,
-                        borderColor: '#7c3aed',
-                        backgroundColor: 'rgba(124, 58, 237, 0.12)',
-                        pointRadius: 0,
-                        tension: 0.25,
-                        fill: true
-                    }
-                ]
-            },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false
-            }
+            data: { labels, datasets: [{ label: 'Threads', data: threadSeries, borderWidth: 2, borderColor: '#7c3aed', backgroundColor: 'rgba(124, 58, 237, 0.12)', pointRadius: 0, tension: 0.25, fill: true }] },
+            options: { animation: false, responsive: true, maintainAspectRatio: false }
         });
 
         const ioChart = new Chart(document.getElementById('ioChart'), {
@@ -322,57 +350,61 @@
             data: {
                 labels,
                 datasets: [
-                    {
-                        label: 'Read MB',
-                        data: ioReadSeries,
-                        borderWidth: 2,
-                        borderColor: '#0ea5e9',
-                        pointRadius: 0,
-                        tension: 0.25
-                    },
-                    {
-                        label: 'Write MB',
-                        data: ioWriteSeries,
-                        borderWidth: 2,
-                        borderColor: '#f97316',
-                        pointRadius: 0,
-                        tension: 0.25
-                    }
+                    { label: 'Read MB', data: ioReadSeries, borderWidth: 2, borderColor: '#0ea5e9', pointRadius: 0, tension: 0.25 },
+                    { label: 'Write MB', data: ioWriteSeries, borderWidth: 2, borderColor: '#f97316', pointRadius: 0, tension: 0.25 }
                 ]
             },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false
-            }
+            options: { animation: false, responsive: true, maintainAspectRatio: false }
         });
 
         const handlesChart = new Chart(document.getElementById('handlesChart'), {
             type: 'line',
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: 'Handles',
-                        data: handlesSeries,
-                        borderWidth: 2,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                        pointRadius: 0,
-                        tension: 0.25,
-                        fill: true
-                    }
-                ]
-            },
-            options: {
-                animation: false,
-                responsive: true,
-                maintainAspectRatio: false
-            }
+            data: { labels, datasets: [{ label: 'Handles', data: handlesSeries, borderWidth: 2, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.12)', pointRadius: 0, tension: 0.25, fill: true }] },
+            options: { animation: false, responsive: true, maintainAspectRatio: false }
         });
 
         function formatTime(epochSeconds) {
             return new Date(epochSeconds * 1000).toLocaleTimeString();
+        }
+
+        function pushMax(series, value) {
+            series.push(value);
+            if (series.length > maxPoints) {
+                series.shift();
+            }
+        }
+
+        function trimAllSeries() {
+            const all = [
+                labels,
+                totalCpuSeries,
+                usedMemorySeries,
+                totalMemorySeries,
+                threadSeries,
+                ioReadSeries,
+                ioWriteSeries,
+                handlesSeries,
+                ...coreSeries
+            ];
+            all.forEach((series) => {
+                while (series.length > maxPoints) {
+                    series.shift();
+                }
+            });
+        }
+
+        function setConnectionState(text) {
+            connectionState.textContent = text;
+        }
+
+        function authSafeFetch(url, options = {}) {
+            return fetch(url, options).then((response) => {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    throw new Error('Unauthorized');
+                }
+                return response;
+            });
         }
 
         function renderProcesses(processes) {
@@ -381,30 +413,21 @@
                 return;
             }
 
-            const rows = processes
-                .map((p) => {
-                    const cpu = Number(p.cpu_percent || 0).toFixed(2);
-                    const memory = Number(p.memory_mb || 0).toFixed(2);
-                    const threads = Number(p.thread_count || 0);
-                    const ioRead = Number(p.io_read_mb || 0).toFixed(2);
-                    const ioWrite = Number(p.io_write_mb || 0).toFixed(2);
-                    const handles = Number(p.handle_count || 0);
-                    return `<tr><td>${p.name}</td><td>${p.pid}</td><td>${cpu}</td><td>${memory}</td><td>${threads}</td><td>${ioRead}</td><td>${ioWrite}</td><td>${handles}</td></tr>`;
-                })
-                .join('');
+            const rows = processes.map((p) => {
+                const cpu = Number(p.cpu_percent || 0).toFixed(2);
+                const memory = Number(p.memory_mb || 0).toFixed(2);
+                const threads = Number(p.thread_count || 0);
+                const ioRead = Number(p.io_read_mb || 0).toFixed(2);
+                const ioWrite = Number(p.io_write_mb || 0).toFixed(2);
+                const handles = Number(p.handle_count || 0);
+                return `<tr><td>${p.name}</td><td>${p.pid}</td><td>${cpu}</td><td>${memory}</td><td>${threads}</td><td>${ioRead}</td><td>${ioWrite}</td><td>${handles}</td></tr>`;
+            }).join('');
 
             processContainer.innerHTML = `
                 <table>
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>PID</th>
-                            <th>CPU %</th>
-                            <th>Memory (MB)</th>
-                            <th>Threads</th>
-                            <th>I/O Read (MB)</th>
-                            <th>I/O Write (MB)</th>
-                            <th>Handles</th>
+                            <th>Name</th><th>PID</th><th>CPU %</th><th>Memory (MB)</th><th>Threads</th><th>I/O Read (MB)</th><th>I/O Write (MB)</th><th>Handles</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -412,36 +435,49 @@
             `;
         }
 
-        function pushMax(series, value) {
-            series.push(value);
-            if (series.length > MAX_POINTS) {
-                series.shift();
+        function renderAlerts(alerts) {
+            if (!Array.isArray(alerts) || alerts.length === 0) {
+                alertStatusChip.textContent = 'clear';
+                alertStatusChip.className = 'chip good';
+                alertStatusText.textContent = 'No active alerts in the selected time window.';
+                alertHistoryContainer.innerHTML = '<p class="empty">No alerts in window.</p>';
+                return;
             }
+
+            const latest = alerts[alerts.length - 1];
+            const latestAgeSeconds = Math.max(0, Math.floor(Date.now() / 1000) - Number(latest.timestamp || 0));
+            const isActive = latestAgeSeconds <= Math.max(30, Math.floor((alertsWindowMinutes * 60) / 2));
+
+            alertStatusChip.textContent = isActive ? 'active' : 'clear';
+            alertStatusChip.className = isActive ? 'chip warn' : 'chip good';
+            alertStatusText.textContent = `${latest.message} (latest ${latestAgeSeconds}s ago)`;
+
+            const rows = [...alerts].reverse().slice(0, 100).map((alert) => {
+                return `<tr><td>${formatTime(alert.timestamp)}</td><td>${alert.severity}</td><td>${alert.rule}</td><td>${Number(alert.current_value || 0).toFixed(2)}</td><td>${Number(alert.threshold || 0).toFixed(2)}</td><td>${alert.message}</td></tr>`;
+            }).join('');
+
+            alertHistoryContainer.innerHTML = `
+                <table>
+                    <thead>
+                        <tr><th>Time</th><th>Severity</th><th>Rule</th><th>Value</th><th>Threshold</th><th>Message</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
         }
 
         function syncCoreSeries(coreValues) {
             while (coreSeries.length < coreValues.length) {
                 coreSeries.push([]);
-                coreDatasets.push({
-                    label: `Core ${coreSeries.length - 1}`,
-                    data: coreSeries[coreSeries.length - 1],
-                    borderWidth: 1.5,
-                    pointRadius: 0,
-                    tension: 0.2
-                });
+                coreDatasets.push({ label: `Core ${coreSeries.length - 1}`, data: coreSeries[coreSeries.length - 1], borderWidth: 1.5, pointRadius: 0, tension: 0.2 });
             }
 
             for (let index = 0; index < coreSeries.length; index += 1) {
-                const value = Number(coreValues[index] ?? 0);
-                pushMax(coreSeries[index], value);
+                pushMax(coreSeries[index], Number(coreValues[index] ?? 0));
             }
         }
 
         function appendMetricPoint(metric) {
-            if (!metric || typeof metric !== 'object') {
-                return;
-            }
-
             const timeLabel = formatTime(Number(metric.timestamp || 0));
             pushMax(labels, timeLabel);
             pushMax(totalCpuSeries, Number(metric.total_cpu_percent || 0));
@@ -449,15 +485,11 @@
             pushMax(totalMemorySeries, Number(metric.system_memory_total_mb || 0));
 
             const processes = Array.isArray(metric.top_processes) ? metric.top_processes : [];
-            const totalThreads = processes.reduce((acc, p) => acc + Number(p.thread_count || 0), 0);
-            const totalRead = processes.reduce((acc, p) => acc + Number(p.io_read_mb || 0), 0);
-            const totalWrite = processes.reduce((acc, p) => acc + Number(p.io_write_mb || 0), 0);
-            const totalHandles = processes.reduce((acc, p) => acc + Number(p.handle_count || 0), 0);
+            pushMax(threadSeries, processes.reduce((acc, p) => acc + Number(p.thread_count || 0), 0));
+            pushMax(ioReadSeries, processes.reduce((acc, p) => acc + Number(p.io_read_mb || 0), 0));
+            pushMax(ioWriteSeries, processes.reduce((acc, p) => acc + Number(p.io_write_mb || 0), 0));
+            pushMax(handlesSeries, processes.reduce((acc, p) => acc + Number(p.handle_count || 0), 0));
 
-            pushMax(threadSeries, totalThreads);
-            pushMax(ioReadSeries, totalRead);
-            pushMax(ioWriteSeries, totalWrite);
-            pushMax(handlesSeries, totalHandles);
             syncCoreSeries(Array.isArray(metric.per_core_cpu_percent) ? metric.per_core_cpu_percent : []);
 
             chart.update();
@@ -471,23 +503,16 @@
             statusEl.textContent = `Last update: ${timeLabel} | Current CPU: ${Number(metric.total_cpu_percent || 0).toFixed(2)}%`;
         }
 
-        function setConnectionState(text) {
-            connectionState.textContent = text;
-        }
-
         function connectLiveStream() {
             setConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
             const socket = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
 
-            socket.onopen = () => {
-                setConnectionState('connected');
-            };
+            socket.onopen = () => setConnectionState('connected');
 
             socket.onmessage = (event) => {
                 try {
-                    const payload = JSON.parse(event.data);
-                    appendMetricPoint(payload);
+                    appendMetricPoint(JSON.parse(event.data));
                 } catch (_error) {
                     statusEl.textContent = 'Received malformed metric payload.';
                 }
@@ -496,34 +521,132 @@
             socket.onclose = () => {
                 setConnectionState('reconnecting');
                 statusEl.textContent = 'Live stream disconnected. Reconnecting...';
-                setTimeout(connectLiveStream, RECONNECT_DELAY_MS);
+                setTimeout(connectLiveStream, reconnectDelayMs);
             };
 
             socket.onerror = () => {
                 setConnectionState('error');
                 socket.close();
-                statusEl.textContent = 'Failed to connect to live metrics stream.';
             };
         }
 
         async function bootstrapRecent() {
-            try {
-                const response = await fetch('/api/metrics/recent', { cache: 'no-store' });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const metrics = await response.json();
-                if (!Array.isArray(metrics) || metrics.length === 0) {
-                    statusEl.textContent = 'No recent metrics in the last 5 minutes.';
-                    return;
-                }
-                metrics.slice(-MAX_POINTS).forEach(appendMetricPoint);
-            } catch (_error) {
-                statusEl.textContent = 'Unable to load recent metrics snapshot.';
+            const response = await authSafeFetch('/api/metrics/recent', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const metrics = await response.json();
+            if (Array.isArray(metrics)) {
+                metrics.slice(-maxPoints).forEach(appendMetricPoint);
             }
         }
 
-        bootstrapRecent().finally(connectLiveStream);
+        async function refreshAlerts() {
+            const response = await authSafeFetch(`/api/alerts/recent?minutes=${alertsWindowMinutes}`, { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            renderAlerts(await response.json());
+        }
+
+        async function refreshBackendPerformance() {
+            const response = await authSafeFetch('/api/backend/performance', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const perf = await response.json();
+
+            backendLatency.textContent = `${Number(perf.latency_ms || 0).toFixed(2)} ms`;
+            backendStatus.textContent = perf.status || 'unknown';
+            backendRedis.textContent = perf.redis || 'unknown';
+            backendPostgres.textContent = perf.postgres || 'unknown';
+
+            const healthy = String(perf.status || '').toLowerCase() === 'ok';
+            backendStatusChip.textContent = healthy ? 'healthy' : 'degraded';
+            backendStatusChip.className = healthy ? 'chip good' : 'chip warn';
+        }
+
+        function restartPerfPolling() {
+            if (perfPollTimer) {
+                clearInterval(perfPollTimer);
+            }
+            perfPollTimer = setInterval(() => {
+                refreshBackendPerformance().catch((error) => {
+                    backendStatusChip.textContent = 'error';
+                    backendStatusChip.className = 'chip warn';
+                    statusEl.textContent = `Backend performance check failed: ${error.message}`;
+                });
+            }, perfPollSeconds * 1000);
+        }
+
+        async function loadConfig() {
+            const response = await authSafeFetch('/api/dashboard/config', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const cfg = await response.json();
+            maxPoints = Number(cfg.max_points || maxPoints);
+            alertsWindowMinutes = Number(cfg.alerts_window_minutes || alertsWindowMinutes);
+            perfPollSeconds = Number(cfg.perf_poll_seconds || perfPollSeconds);
+
+            cfgMaxPoints.value = String(maxPoints);
+            cfgAlertMinutes.value = String(alertsWindowMinutes);
+            cfgPerfSeconds.value = String(perfPollSeconds);
+            trimAllSeries();
+        }
+
+        configForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const payload = {
+                max_points: Number(cfgMaxPoints.value),
+                alerts_window_minutes: Number(cfgAlertMinutes.value),
+                perf_poll_seconds: Number(cfgPerfSeconds.value)
+            };
+
+            const response = await authSafeFetch('/api/dashboard/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                configStatus.textContent = `Save failed: HTTP ${response.status}`;
+                return;
+            }
+
+            const cfg = await response.json();
+            maxPoints = Number(cfg.max_points);
+            alertsWindowMinutes = Number(cfg.alerts_window_minutes);
+            perfPollSeconds = Number(cfg.perf_poll_seconds);
+            trimAllSeries();
+            restartPerfPolling();
+            configStatus.textContent = 'Configuration saved.';
+            await refreshAlerts();
+            await refreshBackendPerformance();
+        });
+
+        logoutBtn.addEventListener('click', async () => {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        });
+
+        Promise.all([loadConfig(), bootstrapRecent()])
+            .then(() => {
+                connectLiveStream();
+                return Promise.all([refreshAlerts(), refreshBackendPerformance()]);
+            })
+            .then(() => {
+                setInterval(() => {
+                    refreshAlerts().catch((error) => {
+                        statusEl.textContent = `Alert refresh failed: ${error.message}`;
+                    });
+                }, 5000);
+                restartPerfPolling();
+            })
+            .catch((error) => {
+                statusEl.textContent = `Initialization failed: ${error.message}`;
+            });
     </script>
 </body>
 </html>
