@@ -1,11 +1,13 @@
 # Python Backend Service (FastAPI)
 
-Phase 1 backend for ingesting metrics from the C++ agent and serving recent metrics for the dashboard.
+Phase 1 + Phase 2 backend for ingesting metrics from the C++ agent, serving recent metrics, streaming live updates, and persisting historical data.
 
 ## Features
 - `POST /ingest/metrics`: Receives and stores incoming metrics in Redis
 - `GET /api/metrics/recent`: Returns metrics from the last 5 minutes
-- `GET /health`: Basic service/Redis health check
+- `GET /health`: Reports backend connectivity to Redis and PostgreSQL
+- `WS /ws/metrics`: Streams live metric payloads via Redis Pub/Sub
+- Optional PostgreSQL persistence for historical metrics (`POSTGRES_DSN`)
 
 ## Requirements
 - Python 3.11+
@@ -28,7 +30,18 @@ By default, Redis is expected at `localhost:6379`.
 - `REDIS_PORT` (default: `6379`)
 - `REDIS_DB` (default: `0`)
 - `REDIS_METRICS_KEY` (default: `metrics:timeline`)
+- `REDIS_METRICS_CHANNEL` (default: `metrics:live`)
 - `RETENTION_SECONDS` (default: `300`)
+- `POSTGRES_DSN` (default: empty/disabled)
+- `POSTGRES_TABLE` (default: `metrics_snapshots`)
+
+Example PostgreSQL DSN:
+
+```bash
+POSTGRES_DSN=postgresql://postgres:postgres@localhost:5432/metrics
+```
+
+When `POSTGRES_DSN` is set, the backend auto-creates a metrics table with indexes and inserts every ingested snapshot.
 
 ## Docker Build
 

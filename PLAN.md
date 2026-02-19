@@ -50,11 +50,11 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Collect handles
 
 ### Backend (Python/FastAPI)
-- [ ] Implement WebSocket endpoint for real-time updates
-- [ ] Set up PostgreSQL connection for historical data
-- [ ] Implement metrics storage in PostgreSQL
-- [ ] Implement Pub/Sub mechanism via Redis for WebSocket broadcasts
-- [ ] Design schema for metrics table in PostgreSQL
+- [x] Implement WebSocket endpoint for real-time updates
+- [x] Set up PostgreSQL connection for historical data
+- [x] Implement metrics storage in PostgreSQL
+- [x] Implement Pub/Sub mechanism via Redis for WebSocket broadcasts
+- [x] Design schema for metrics table in PostgreSQL
 
 ### Dashboard
 - [ ] Switch from polling to WebSocket for real-time updates

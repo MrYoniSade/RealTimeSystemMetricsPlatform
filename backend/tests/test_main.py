@@ -18,6 +18,7 @@ class FakePipeline:
     def __init__(self):
         self.zadd_payload = None
         self.zremrangebyscore_args = None
+        self.publish_args = None
         self.expire_args = None
         self.executed = False
 
@@ -31,6 +32,10 @@ class FakePipeline:
 
     def expire(self, key, ttl):
         self.expire_args = (key, ttl)
+        return self
+
+    def publish(self, channel, message):
+        self.publish_args = (channel, message)
         return self
 
     def execute(self):
@@ -101,7 +106,11 @@ def test_health_ok(monkeypatch):
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "redis": "connected"}
+    assert response.json() == {
+        "status": "ok",
+        "redis": "connected",
+        "postgres": "disabled",
+    }
 
 
 def test_health_degraded_when_redis_down(monkeypatch):
@@ -116,7 +125,11 @@ def test_health_degraded_when_redis_down(monkeypatch):
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "degraded", "redis": "disconnected"}
+    assert response.json() == {
+        "status": "degraded",
+        "redis": "disconnected",
+        "postgres": "disabled",
+    }
 
 
 def test_ingest_metrics_success(monkeypatch):
@@ -140,6 +153,8 @@ def test_ingest_metrics_success(monkeypatch):
     assert pipeline.zadd_payload[0] == backend_main.METRICS_KEY
     assert pipeline.zremrangebyscore_args[0] == backend_main.METRICS_KEY
     assert pipeline.zremrangebyscore_args[1] == "-inf"
+    assert pipeline.publish_args is not None
+    assert pipeline.publish_args[0] == backend_main.METRICS_CHANNEL
     assert pipeline.expire_args == (backend_main.METRICS_KEY, backend_main.RETENTION_SECONDS * 2)
 
     stored_json = next(iter(pipeline.zadd_payload[1].keys()))

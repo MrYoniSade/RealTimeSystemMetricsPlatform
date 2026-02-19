@@ -35,15 +35,22 @@ Error handling strategy:
 """
 
 import json
+import importlib
+import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from fastapi import HTTPException
+from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import RedisError
 
 from .declarations import (
         METRICS_KEY,
+        METRICS_CHANNEL,
+        POSTGRES_DSN,
+        POSTGRES_TABLE,
         REDIS_DB,
         REDIS_HOST,
         REDIS_PORT,
@@ -51,6 +58,10 @@ from .declarations import (
         MetricsPayload,
         app,
 )
+
+
+logger = logging.getLogger(__name__)
+_postgres_schema_ready = False
 
 
 def get_redis() -> Redis:
@@ -64,6 +75,140 @@ def get_redis() -> Redis:
             Redis-py internally manages socket connections.
         """
         return Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+
+
+def get_async_redis() -> AsyncRedis:
+        """Create and return an async Redis client for pub/sub and WebSocket streaming."""
+        return AsyncRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+
+
+def _resolve_postgres_table_name() -> str:
+        """Return a safe SQL identifier for the configured metrics table name."""
+        if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", POSTGRES_TABLE):
+                return POSTGRES_TABLE
+        return "metrics_snapshots"
+
+
+def _ensure_postgres_schema(connection) -> None:
+        """Create the metrics table/indexes when PostgreSQL storage is enabled."""
+        global _postgres_schema_ready
+        if _postgres_schema_ready:
+                return
+
+        table_name = _resolve_postgres_table_name()
+        with connection.cursor() as cursor:
+                cursor.execute(
+                        f"""
+                        CREATE TABLE IF NOT EXISTS {table_name} (
+                                id BIGSERIAL PRIMARY KEY,
+                                timestamp_utc TIMESTAMPTZ NOT NULL,
+                                epoch_seconds BIGINT NOT NULL,
+                                total_cpu_percent DOUBLE PRECISION NOT NULL,
+                                per_core_cpu_percent JSONB NOT NULL DEFAULT '[]'::jsonb,
+                                system_memory_total_mb DOUBLE PRECISION NOT NULL DEFAULT 0,
+                                system_memory_used_mb DOUBLE PRECISION NOT NULL DEFAULT 0,
+                                top_processes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                        """
+                )
+                cursor.execute(
+                        f"""
+                        CREATE INDEX IF NOT EXISTS idx_{table_name}_timestamp_utc
+                        ON {table_name} (timestamp_utc DESC)
+                        """
+                )
+                cursor.execute(
+                        f"""
+                        CREATE INDEX IF NOT EXISTS idx_{table_name}_created_at
+                        ON {table_name} (created_at DESC)
+                        """
+                )
+
+        _postgres_schema_ready = True
+
+
+def check_postgres_connection() -> None:
+        """Verify PostgreSQL connectivity and ensure schema readiness."""
+        if not POSTGRES_DSN:
+                return
+
+        try:
+                psycopg = importlib.import_module("psycopg")
+        except ModuleNotFoundError as ex:
+                raise HTTPException(
+                        status_code=500,
+                        detail="PostgreSQL storage configured but psycopg is not installed",
+                ) from ex
+
+        try:
+                with psycopg.connect(POSTGRES_DSN, autocommit=True) as connection:
+                        _ensure_postgres_schema(connection)
+        except Exception as ex:
+                raise HTTPException(status_code=503, detail=f"PostgreSQL unavailable: {str(ex)}") from ex
+
+
+def store_metrics_in_postgres(payload: MetricsPayload) -> None:
+        """Persist one metrics snapshot into PostgreSQL when a DSN is configured."""
+        if not POSTGRES_DSN:
+                return
+
+        try:
+                psycopg = importlib.import_module("psycopg")
+                json_types = importlib.import_module("psycopg.types.json")
+        except ModuleNotFoundError as ex:
+                raise HTTPException(
+                        status_code=500,
+                        detail="PostgreSQL storage configured but psycopg is not installed",
+                ) from ex
+
+        json_wrapper = getattr(json_types, "Jsonb")
+
+        table_name = _resolve_postgres_table_name()
+        snapshot_time = datetime.fromtimestamp(payload.timestamp, tz=timezone.utc)
+        top_processes = [process.model_dump() for process in payload.top_processes]
+
+        try:
+                with psycopg.connect(POSTGRES_DSN, autocommit=True) as connection:
+                        _ensure_postgres_schema(connection)
+                        with connection.cursor() as cursor:
+                                cursor.execute(
+                                        f"""
+                                        INSERT INTO {table_name} (
+                                                timestamp_utc,
+                                                epoch_seconds,
+                                                total_cpu_percent,
+                                                per_core_cpu_percent,
+                                                system_memory_total_mb,
+                                                system_memory_used_mb,
+                                                top_processes
+                                        )
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                        """,
+                                        (
+                                                snapshot_time,
+                                                payload.timestamp,
+                                                payload.total_cpu_percent,
+                                                json_wrapper(payload.per_core_cpu_percent),
+                                                payload.system_memory_total_mb,
+                                                payload.system_memory_used_mb,
+                                                json_wrapper(top_processes),
+                                        ),
+                                )
+        except Exception as ex:
+                raise HTTPException(status_code=503, detail=f"PostgreSQL unavailable: {str(ex)}") from ex
+
+
+@app.on_event("startup")
+def initialize_postgres_schema() -> None:
+        """Initialize PostgreSQL schema early when storage is enabled."""
+        if not POSTGRES_DSN:
+                return
+
+        try:
+                check_postgres_connection()
+        except HTTPException as ex:
+                logger.warning("PostgreSQL schema initialization skipped: %s", ex.detail)
 
 
 @app.get("/health")
@@ -84,9 +229,21 @@ def health_check() -> dict:
         try:
                 client = get_redis()
                 client.ping()
-                return {"status": "ok", "redis": "connected"}
+                response = {"status": "ok", "redis": "connected"}
         except RedisError:
-                return {"status": "degraded", "redis": "disconnected"}
+                response = {"status": "degraded", "redis": "disconnected"}
+
+        if not POSTGRES_DSN:
+                response["postgres"] = "disabled"
+                return response
+
+        try:
+                check_postgres_connection()
+                response["postgres"] = "connected"
+        except HTTPException:
+                response["postgres"] = "disconnected"
+
+        return response
 
 
 @app.post("/ingest/metrics")
@@ -126,10 +283,14 @@ def ingest_metrics(payload: MetricsPayload) -> dict:
                 pipe = client.pipeline()
                 pipe.zadd(METRICS_KEY, {serialized: payload.timestamp})
                 pipe.zremrangebyscore(METRICS_KEY, "-inf", min_ts)
+                if hasattr(pipe, "publish"):
+                        pipe.publish(METRICS_CHANNEL, serialized)
                 pipe.expire(METRICS_KEY, RETENTION_SECONDS * 2)
                 pipe.execute()
         except RedisError as ex:
                 raise HTTPException(status_code=503, detail=f"Redis unavailable: {str(ex)}") from ex
+
+        store_metrics_in_postgres(payload)
 
         return {"status": "accepted", "timestamp": payload.timestamp}
 
@@ -172,3 +333,30 @@ def get_recent_metrics() -> List[MetricsPayload]:
                         continue
 
         return parsed
+
+
+@app.websocket("/ws/metrics")
+async def metrics_updates_ws(websocket: WebSocket) -> None:
+        """Broadcast live metric snapshots using Redis pub/sub."""
+        await websocket.accept()
+        client = get_async_redis()
+        pubsub = client.pubsub()
+
+        try:
+                await pubsub.subscribe(METRICS_CHANNEL)
+                async for message in pubsub.listen():
+                        if message.get("type") != "message":
+                                continue
+                        payload = message.get("data")
+                        if payload is None:
+                                continue
+                        await websocket.send_text(str(payload))
+        except (WebSocketDisconnect, RedisError):
+                pass
+        finally:
+                try:
+                        await pubsub.unsubscribe(METRICS_CHANNEL)
+                        await pubsub.close()
+                        await client.aclose()
+                except RedisError:
+                        pass

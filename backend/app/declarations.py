@@ -43,7 +43,11 @@ def _parse_int_env(name: str, default: str) -> int:
 REDIS_PORT = _parse_int_env("REDIS_PORT", "6379")
 REDIS_DB = _parse_int_env("REDIS_DB", "0")
 METRICS_KEY = os.getenv("REDIS_METRICS_KEY", "metrics:timeline")
+METRICS_CHANNEL = os.getenv("REDIS_METRICS_CHANNEL", "metrics:live")
 RETENTION_SECONDS = _parse_int_env("RETENTION_SECONDS", "300")
+
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
+POSTGRES_TABLE = os.getenv("POSTGRES_TABLE", "metrics_snapshots")
 
 
 app = FastAPI(title="System Metrics Backend", version="0.1.0")
