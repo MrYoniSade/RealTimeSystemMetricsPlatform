@@ -278,7 +278,7 @@ def test_ingest_metrics_rejects_total_cpu_above_100():
 
 
 def test_ingest_metrics_rejects_too_many_top_processes():
-    """Returns 422 when top_processes exceeds configured max length."""
+    """Returns 422 when top_processes exceeds configured max length (12)."""
 
     payload = sample_payload()
     payload["top_processes"] = [
@@ -288,7 +288,7 @@ def test_ingest_metrics_rejects_too_many_top_processes():
             "cpu_percent": 1.0,
             "memory_mb": 10.0,
         }
-        for index in range(6)
+        for index in range(13)
     ]
 
     client = TestClient(backend_main.app)

@@ -630,7 +630,7 @@ double MetricsCollector::get_total_cpu() {
  *
  * On Windows, this method uses the Toolhelp32 API to enumerate processes
  * and gather their metrics. The processes are sorted by CPU usage, and
- * only the top 5 are returned.
+ * only the top N are returned.
  *
  * @return A vector of ProcessMetrics objects representing the top processes.
  */
@@ -752,9 +752,9 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
         return left.memory_mb > right.memory_mb;
     });
 
-    // Sort by CPU and take top 5
-    if (processes.size() > 5) {
-        processes.resize(5);
+    // Sort by CPU and take top 12
+    if (processes.size() > 12) {
+        processes.resize(12);
     }
 #elif defined(__linux__)
     uint64_t system_idle_start = 0;
@@ -827,8 +827,8 @@ std::vector<ProcessMetrics> MetricsCollector::get_top_processes() {
         return left.memory_mb > right.memory_mb;
     });
 
-    if (processes.size() > 5) {
-        processes.resize(5);
+    if (processes.size() > 12) {
+        processes.resize(12);
     }
 #endif
 

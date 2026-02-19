@@ -23,7 +23,7 @@ class MetricsPayload(BaseModel):
     per_core_cpu_percent: List[float] = Field(default_factory=list)
     system_memory_total_mb: float = Field(default=0, ge=0)
     system_memory_used_mb: float = Field(default=0, ge=0)
-    top_processes: List[ProcessMetric] = Field(default_factory=list, max_length=5)
+    top_processes: List[ProcessMetric] = Field(default_factory=list, max_length=12)
 
 
 class AlertEvent(BaseModel):

@@ -48,6 +48,7 @@ try {
     Write-Host "Waiting for stateless workloads to become ready..."
     Invoke-CheckedCommand -Command 'kubectl' -Arguments @('rollout', 'status', 'deployment/backend', '--timeout=180s') -ErrorMessage 'Backend rollout failed'
     Invoke-CheckedCommand -Command 'kubectl' -Arguments @('rollout', 'status', 'deployment/agent', '--timeout=180s') -ErrorMessage 'Agent rollout failed'
+    Invoke-CheckedCommand -Command 'kubectl' -Arguments @('rollout', 'status', 'deployment/dummy-workloads', '--timeout=180s') -ErrorMessage 'Dummy workloads rollout failed'
     Invoke-CheckedCommand -Command 'kubectl' -Arguments @('rollout', 'status', 'deployment/dashboard', '--timeout=180s') -ErrorMessage 'Dashboard rollout failed'
 
     $dashboardNodePort = & kubectl get svc dashboard -o jsonpath='{.spec.ports[0].nodePort}'

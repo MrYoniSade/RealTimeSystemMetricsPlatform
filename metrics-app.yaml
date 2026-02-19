@@ -154,6 +154,7 @@ spec:
       labels:
         app: agent
     spec:
+      hostPID: true
       containers:
       - name: agent
         image: metrics-agent:latest
@@ -161,7 +162,79 @@ spec:
         # Passing your flags as arguments
         args: ["--backend-url", "http://backend:8000", "--interval", "2"]
 ---
-# 4. DASHBOARD
+# 4. DUMMY WORKLOADS (visible to hostPID-enabled agent)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummy-workloads
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: dummy-workloads
+  template:
+    metadata:
+      labels:
+        app: dummy-workloads
+    spec:
+      containers:
+      - name: dummy-worker
+        image: python:3.11-alpine
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c"]
+        args:
+          - |
+            python -u - <<'PY'
+            import hashlib
+            import os
+            import random
+            import threading
+            import time
+
+            payload = bytearray(32 * 1024 * 1024)
+            path = "/tmp/dummy-workload.bin"
+
+            def cpu_task():
+                while True:
+                    hashlib.sha256(os.urandom(4096)).hexdigest()
+
+            def io_task():
+                while True:
+                    with open(path, "wb") as f:
+                        f.write(os.urandom(2 * 1024 * 1024))
+                    with open(path, "rb") as f:
+                        f.read()
+                    time.sleep(0.03)
+
+            def memory_task():
+                while True:
+                    index = random.randint(0, len(payload) - 1)
+                    payload[index] = (payload[index] + 1) % 256
+                    time.sleep(0.002)
+
+            for _ in range(6):
+                threading.Thread(target=cpu_task, daemon=True).start()
+            for _ in range(3):
+                threading.Thread(target=io_task, daemon=True).start()
+            for _ in range(3):
+                threading.Thread(target=memory_task, daemon=True).start()
+
+            while True:
+                time.sleep(1)
+            PY
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+---
+# 5. DASHBOARD
 apiVersion: apps/v1
 kind: Deployment
 metadata:

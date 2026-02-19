@@ -129,7 +129,7 @@ Build a small observability stack for monitoring system metrics on a local machi
 2. **Data Retention**: Last 5 minutes in Redis (real-time), historical in PostgreSQL
 3. **Communication**: HTTP/REST for agent→backend, WebSocket for backend→dashboard
 4. **Deployment**: Minikube only (no Docker Compose)
-5. **Top Processes**: Show top 5 by CPU usage
+5. **Top Processes**: Show top 12 by CPU usage
 
 ---
 

@@ -14,7 +14,7 @@ TEST_CASE("MetricsCollector::collect returns valid timestamp and bounded process
 
     CHECK(metrics.timestamp >= before);
     CHECK(metrics.timestamp <= after);
-    CHECK(metrics.top_processes.size() <= 5);
+    CHECK(metrics.top_processes.size() <= 12);
     CHECK(std::isfinite(metrics.total_cpu_percent));
     CHECK(metrics.total_cpu_percent >= 0.0);
     CHECK(std::isfinite(metrics.system_memory_total_mb));

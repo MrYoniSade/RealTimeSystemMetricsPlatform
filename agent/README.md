@@ -5,7 +5,7 @@ The C++ component responsible for collecting system metrics and sending them to 
 ## Features
 
 - Collects total CPU usage (overall)
-- Collects top 5 processes by CPU usage
+- Collects top 12 processes by CPU usage
 - Sends metrics as JSON via HTTP POST every 2 seconds (configurable)
 - Multi-threaded runtime (separate collector and sender threads)
 - JSON/YAML config file support
