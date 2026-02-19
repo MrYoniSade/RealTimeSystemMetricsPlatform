@@ -50,7 +50,7 @@ Dashboard details are documented in `dashboard/README.md`.
 
 ---
 
-## Quick Start (Kubernetes: Redis + Backend + Agent + Dashboard)
+## Quick Start (Kubernetes: Redis + PostgreSQL + Backend + Agent + Dashboard)
 
 Use the manifest `metrics-app.yaml` at the repository root.
 
@@ -62,6 +62,7 @@ Use the manifest `metrics-app.yaml` at the repository root.
 	- `kubectl apply -f metrics-app.yaml`
 3. Verify workloads:
 	- `kubectl get pods`
+	- `kubectl get statefulsets`
 	- `kubectl get svc`
 4. Access backend service:
 	- If using Docker Desktop Kubernetes: open `http://localhost:8000`

@@ -65,9 +65,9 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Add handles visualization
 
 ### Infrastructure
-- [ ] Set up PostgreSQL container
-- [ ] Set up Redis container
-- [ ] Update Kubernetes manifests with StatefulSets for databases
+- [x] Set up PostgreSQL container
+- [x] Set up Redis container
+- [x] Update Kubernetes manifests with StatefulSets for databases
 
 ---
 
@@ -138,8 +138,8 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Agent collects and sends metrics successfully
 - [x] Backend ingests and stores metrics
 - [x] Dashboard displays real-time CPU metrics
-- [ ] WebSocket provides live updates without polling
-- [ ] PostgreSQL retains historical data
+- [x] WebSocket provides live updates without polling
+- [x] PostgreSQL retains historical data
 - [x] System deploys and runs on Minikube
 - [ ] Alerts trigger on defined thresholds
 - [ ] System handles graceful shutdown
