@@ -74,6 +74,29 @@ Use the manifest `metrics-app.yaml` at the repository root.
 To stop/remove all resources:
 	- `kubectl delete -f metrics-app.yaml`
 
+### Phase 3 Deployment Runbook (Local Kubernetes)
+
+Use the automated script:
+
+1. Build fresh images (backend/agent/dashboard) from repo root.
+2. Run:
+	- `powershell -ExecutionPolicy Bypass -File .\scripts\setup-k8s.ps1`
+3. Verify:
+	- `kubectl get pods -o wide`
+	- `kubectl get svc`
+4. Open dashboard:
+	- `http://localhost:30430`
+
+Graceful shutdown test:
+
+- Restart and observe healthy recovery:
+	- `kubectl rollout restart deployment/agent`
+	- `kubectl rollout restart deployment/backend`
+	- `kubectl rollout restart deployment/dashboard`
+
+- Tear down cleanly:
+	- `kubectl delete -f metrics-app.yaml`
+
 ---
 
 

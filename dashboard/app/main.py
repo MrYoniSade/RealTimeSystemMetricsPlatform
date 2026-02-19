@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 from time import perf_counter
 from typing import Any
 
@@ -35,6 +36,8 @@ runtime_config = DashboardConfig(
     alerts_window_minutes=settings.default_alert_minutes,
     perf_poll_seconds=settings.default_perf_poll_seconds,
 )
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="System Metrics Dashboard", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -78,6 +81,12 @@ def health_check() -> dict:
         "status": "ok",
         "backend_url": settings.backend_base_url,
     }
+
+
+@app.on_event("shutdown")
+def shutdown_cleanup() -> None:
+    """Emit a deterministic shutdown event for graceful termination visibility."""
+    logger.info("Dashboard shutdown cleanup completed")
 
 
 @app.get("/login", response_model=None)

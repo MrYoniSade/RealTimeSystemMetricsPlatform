@@ -3,6 +3,7 @@ docker network create metrics-net
 *** Build images from repo root: ***
 docker build -t metrics-backend:latest -f backend/Dockerfile . 
 docker build -t metrics-agent:latest -f agent/Dockerfile agent
+docker build -t metrics-dashboard:latest -f dashboard/Dockerfile .
 *** If containers already exist, recreate agent with the new image: ***
 docker rm -f agent
 docker build --no-cache -t metrics-agent:latest -f agent/Dockerfile agent
@@ -12,17 +13,25 @@ docker run -d --name redis --network metrics-net -p 6379:6379 redis:7-alpine
 docker run -d --name backend --network metrics-net -p 8000:8000 -e REDIS_HOST=redis metrics-backend:latest
 *** Run agent on same network, pointing to backend container name: ***
 docker run -d --name agent --network metrics-net metrics-agent:latest --backend-url http://backend:8000 --interval 2
-*** Run dashboard on same network,
-docker build -t metrics-dashboard:latest -f dashboard/Dockerfile .
+*** Run dashboard on same network: ***
+docker run -d --name dashboard --network metrics-net -p 8080:8080 -e BACKEND_BASE_URL=http://backend:8000 metrics-dashboard:latest
 
 
 *** K8S
-*** fetch dashboard port 
-kubectl get svc dashboard
-# delete earlier version:
-kubectl delete -f metrics-app.yaml
-*** apply K8S manifest
-kubectl apply -f metrics-app.yaml
+*** deploy/redeploy full stack: ***
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-k8s.ps1
 
+*** verify: ***
+kubectl get pods -o wide
+kubectl get svc
 
+*** dashboard fixed URL: ***
+http://localhost:30430
+
+*** restart components gracefully: ***
 kubectl rollout restart deployment/agent
+kubectl rollout restart deployment/backend
+kubectl rollout restart deployment/dashboard
+
+*** teardown: ***
+kubectl delete -f metrics-app.yaml

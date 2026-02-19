@@ -98,14 +98,14 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Implement user authentication
 
 ### Infrastructure
-- [ ] Create Kubernetes Deployment manifests for backend
-- [ ] Create Kubernetes Deployment manifests for agent
-- [ ] Create Kubernetes Deployment manifests for dashboard
-- [ ] Create Kubernetes StatefulSet manifests for Redis
-- [ ] Create Kubernetes StatefulSet manifests for PostgreSQL
-- [ ] Create Kubernetes Service manifests for inter-component communication
-- [ ] Deploy complete system on Minikube
-- [ ] Document deployment steps
+- [x] Create Kubernetes Deployment manifests for backend
+- [x] Create Kubernetes Deployment manifests for agent
+- [x] Create Kubernetes Deployment manifests for dashboard
+- [x] Create Kubernetes StatefulSet manifests for Redis
+- [x] Create Kubernetes StatefulSet manifests for PostgreSQL
+- [x] Create Kubernetes Service manifests for inter-component communication
+- [x] Deploy complete system on Minikube
+- [x] Document deployment steps
 
 ---
 
@@ -142,4 +142,4 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] PostgreSQL retains historical data
 - [x] System deploys and runs on Minikube
 - [x] Alerts trigger on defined thresholds
-- [ ] System handles graceful shutdown
+- [x] System handles graceful shutdown

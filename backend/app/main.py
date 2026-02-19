@@ -282,6 +282,21 @@ def initialize_postgres_schema() -> None:
                 logger.warning("PostgreSQL schema initialization skipped: %s", ex.detail)
 
 
+@app.on_event("shutdown")
+def shutdown_cleanup() -> None:
+        """Release in-memory runtime state during graceful shutdown."""
+        global _high_cpu_window_start_ts, _high_cpu_alert_active
+
+        with _rate_limit_lock:
+                _agent_rate_windows.clear()
+
+        with _alert_state_lock:
+                _high_cpu_window_start_ts = None
+                _high_cpu_alert_active = False
+
+        logger.info("Backend shutdown cleanup completed")
+
+
 @app.get(
         "/health",
         response_model=HealthResponse,
