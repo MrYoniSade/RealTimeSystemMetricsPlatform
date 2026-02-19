@@ -210,4 +210,5 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+      nodePort: 30430
   type: NodePort # Access dashboard via http://localhost:8080 (Docker Desktop) or minikube service dashboard --url
