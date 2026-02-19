@@ -1,12 +1,18 @@
 # Dashboard Service (FastAPI + JavaScript)
 
-Phase 1 dashboard for visualizing near-real-time system metrics from the backend.
+Phase 2 dashboard for visualizing real-time system metrics from the backend.
 
 ## Features
-- Polls metrics every 2 seconds from backend endpoint
-- Line chart for total CPU usage over time
-- Table for top processes (name, PID, CPU%, memory)
-- Lightweight FastAPI proxy endpoint to avoid browser CORS issues
+- Live metrics via WebSocket stream (`/ws/metrics` proxy -> backend)
+- Bootstrap snapshot from `/api/metrics/recent`
+- Total CPU usage chart
+- Per-core CPU usage chart
+- System memory chart (used vs total)
+- Thread-count chart (aggregate of top processes)
+- I/O chart (aggregate read/write MB)
+- Handles chart (aggregate)
+- Top-process table with CPU, memory, threads, I/O, and handles
+- FastAPI proxy endpoints to avoid browser CORS issues
 
 ## Local Run
 

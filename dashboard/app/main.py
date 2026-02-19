@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from websockets.client import connect as ws_connect
 
 from .settings import settings
 
@@ -14,6 +15,12 @@ INDEX_FILE = STATIC_DIR / "index.html"
 
 app = FastAPI(title="System Metrics Dashboard", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _backend_ws_metrics_url() -> str:
+    if settings.backend_base_url.startswith("https://"):
+        return f"wss://{settings.backend_base_url[len('https://'):]}/ws/metrics"
+    return f"ws://{settings.backend_base_url[len('http://'):]}/ws/metrics"
 
 
 @app.get("/health")
@@ -49,3 +56,18 @@ async def proxy_recent_metrics() -> list[dict]:
         raise HTTPException(status_code=502, detail="Unexpected backend response format")
 
     return data
+
+
+@app.websocket("/ws/metrics")
+async def proxy_live_metrics(websocket: WebSocket) -> None:
+    await websocket.accept()
+    target = _backend_ws_metrics_url()
+
+    try:
+        async with ws_connect(target) as backend_ws:
+            async for message in backend_ws:
+                await websocket.send_text(str(message))
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        await websocket.close(code=1011)

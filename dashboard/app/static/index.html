@@ -37,7 +37,7 @@
         .grid {
             display: grid;
             gap: 16px;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .card {
@@ -59,7 +59,12 @@
             position: relative;
         }
 
-        #cpuChart {
+        #cpuChart,
+        #perCoreChart,
+        #memoryChart,
+        #threadChart,
+        #ioChart,
+        #handlesChart {
             width: 100% !important;
             height: 100% !important;
             display: block;
@@ -103,15 +108,33 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .meta-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #475467;
+            margin-bottom: 8px;
+        }
+
+        .chip {
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #d0d5dd;
+            font-size: 0.8rem;
+            color: #344054;
+            background: #f9fafb;
+        }
     </style>
 </head>
 <body>
     <h1>Real-Time System Metrics</h1>
-    <p class="meta">Auto-refresh every 2 seconds</p>
+    <p class="meta">Live updates via WebSocket</p>
 
     <div class="grid">
         <section class="card">
-            <h2>Total CPU Usage (%)</h2>
+            <div class="meta-line"><h2>Total CPU Usage (%)</h2><span id="connectionState" class="chip">connecting</span></div>
             <div class="chart-wrap">
                 <canvas id="cpuChart"></canvas>
             </div>
@@ -119,6 +142,41 @@
         </section>
 
         <section class="card">
+            <h2>Per-Core CPU Usage (%)</h2>
+            <div class="chart-wrap">
+                <canvas id="perCoreChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>System Memory (MB)</h2>
+            <div class="chart-wrap">
+                <canvas id="memoryChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Total Thread Count</h2>
+            <div class="chart-wrap">
+                <canvas id="threadChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Process I/O (MB)</h2>
+            <div class="chart-wrap">
+                <canvas id="ioChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Process Handles</h2>
+            <div class="chart-wrap">
+                <canvas id="handlesChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card" style="grid-column: 1 / -1;">
             <h2>Top Processes by CPU</h2>
             <div id="processContainer">
                 <p class="empty">No process data yet.</p>
@@ -127,19 +185,32 @@
     </div>
 
     <script>
-        const POLL_INTERVAL_MS = 2000;
         const MAX_POINTS = 150;
+        const RECONNECT_DELAY_MS = 2000;
 
         const statusEl = document.getElementById('status');
         const processContainer = document.getElementById('processContainer');
+        const connectionState = document.getElementById('connectionState');
+
+        const labels = [];
+        const totalCpuSeries = [];
+        const usedMemorySeries = [];
+        const totalMemorySeries = [];
+        const threadSeries = [];
+        const ioReadSeries = [];
+        const ioWriteSeries = [];
+        const handlesSeries = [];
+
+        const coreSeries = [];
+        const coreDatasets = [];
 
         const chart = new Chart(document.getElementById('cpuChart'), {
             type: 'line',
             data: {
-                labels: [],
+                labels,
                 datasets: [{
                     label: 'CPU %',
-                    data: [],
+                    data: totalCpuSeries,
                     borderWidth: 2,
                     borderColor: '#2563eb',
                     backgroundColor: 'rgba(37, 99, 235, 0.12)',
@@ -171,6 +242,135 @@
             }
         });
 
+        const perCoreChart = new Chart(document.getElementById('perCoreChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: coreDatasets
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'CPU %' }
+                    }
+                }
+            }
+        });
+
+        const memoryChart = new Chart(document.getElementById('memoryChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Used Memory (MB)',
+                        data: usedMemorySeries,
+                        borderWidth: 2,
+                        borderColor: '#059669',
+                        backgroundColor: 'rgba(5, 150, 105, 0.12)',
+                        pointRadius: 0,
+                        tension: 0.25
+                    },
+                    {
+                        label: 'Total Memory (MB)',
+                        data: totalMemorySeries,
+                        borderWidth: 2,
+                        borderColor: '#94a3b8',
+                        pointRadius: 0,
+                        tension: 0.25
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        const threadChart = new Chart(document.getElementById('threadChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Threads',
+                        data: threadSeries,
+                        borderWidth: 2,
+                        borderColor: '#7c3aed',
+                        backgroundColor: 'rgba(124, 58, 237, 0.12)',
+                        pointRadius: 0,
+                        tension: 0.25,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        const ioChart = new Chart(document.getElementById('ioChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Read MB',
+                        data: ioReadSeries,
+                        borderWidth: 2,
+                        borderColor: '#0ea5e9',
+                        pointRadius: 0,
+                        tension: 0.25
+                    },
+                    {
+                        label: 'Write MB',
+                        data: ioWriteSeries,
+                        borderWidth: 2,
+                        borderColor: '#f97316',
+                        pointRadius: 0,
+                        tension: 0.25
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        const handlesChart = new Chart(document.getElementById('handlesChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Handles',
+                        data: handlesSeries,
+                        borderWidth: 2,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                        pointRadius: 0,
+                        tension: 0.25,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
         function formatTime(epochSeconds) {
             return new Date(epochSeconds * 1000).toLocaleTimeString();
         }
@@ -185,7 +385,11 @@
                 .map((p) => {
                     const cpu = Number(p.cpu_percent || 0).toFixed(2);
                     const memory = Number(p.memory_mb || 0).toFixed(2);
-                    return `<tr><td>${p.name}</td><td>${p.pid}</td><td>${cpu}</td><td>${memory}</td></tr>`;
+                    const threads = Number(p.thread_count || 0);
+                    const ioRead = Number(p.io_read_mb || 0).toFixed(2);
+                    const ioWrite = Number(p.io_write_mb || 0).toFixed(2);
+                    const handles = Number(p.handle_count || 0);
+                    return `<tr><td>${p.name}</td><td>${p.pid}</td><td>${cpu}</td><td>${memory}</td><td>${threads}</td><td>${ioRead}</td><td>${ioWrite}</td><td>${handles}</td></tr>`;
                 })
                 .join('');
 
@@ -197,6 +401,10 @@
                             <th>PID</th>
                             <th>CPU %</th>
                             <th>Memory (MB)</th>
+                            <th>Threads</th>
+                            <th>I/O Read (MB)</th>
+                            <th>I/O Write (MB)</th>
+                            <th>Handles</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -204,41 +412,118 @@
             `;
         }
 
-        function updateChart(metrics) {
-            const labels = metrics.map((m) => formatTime(m.timestamp));
-            const values = metrics.map((m) => Number(m.total_cpu_percent || 0));
-
-            chart.data.labels = labels.slice(-MAX_POINTS);
-            chart.data.datasets[0].data = values.slice(-MAX_POINTS);
-            chart.update();
+        function pushMax(series, value) {
+            series.push(value);
+            if (series.length > MAX_POINTS) {
+                series.shift();
+            }
         }
 
-        async function fetchMetrics() {
+        function syncCoreSeries(coreValues) {
+            while (coreSeries.length < coreValues.length) {
+                coreSeries.push([]);
+                coreDatasets.push({
+                    label: `Core ${coreSeries.length - 1}`,
+                    data: coreSeries[coreSeries.length - 1],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.2
+                });
+            }
+
+            for (let index = 0; index < coreSeries.length; index += 1) {
+                const value = Number(coreValues[index] ?? 0);
+                pushMax(coreSeries[index], value);
+            }
+        }
+
+        function appendMetricPoint(metric) {
+            if (!metric || typeof metric !== 'object') {
+                return;
+            }
+
+            const timeLabel = formatTime(Number(metric.timestamp || 0));
+            pushMax(labels, timeLabel);
+            pushMax(totalCpuSeries, Number(metric.total_cpu_percent || 0));
+            pushMax(usedMemorySeries, Number(metric.system_memory_used_mb || 0));
+            pushMax(totalMemorySeries, Number(metric.system_memory_total_mb || 0));
+
+            const processes = Array.isArray(metric.top_processes) ? metric.top_processes : [];
+            const totalThreads = processes.reduce((acc, p) => acc + Number(p.thread_count || 0), 0);
+            const totalRead = processes.reduce((acc, p) => acc + Number(p.io_read_mb || 0), 0);
+            const totalWrite = processes.reduce((acc, p) => acc + Number(p.io_write_mb || 0), 0);
+            const totalHandles = processes.reduce((acc, p) => acc + Number(p.handle_count || 0), 0);
+
+            pushMax(threadSeries, totalThreads);
+            pushMax(ioReadSeries, totalRead);
+            pushMax(ioWriteSeries, totalWrite);
+            pushMax(handlesSeries, totalHandles);
+            syncCoreSeries(Array.isArray(metric.per_core_cpu_percent) ? metric.per_core_cpu_percent : []);
+
+            chart.update();
+            perCoreChart.update();
+            memoryChart.update();
+            threadChart.update();
+            ioChart.update();
+            handlesChart.update();
+
+            renderProcesses(processes);
+            statusEl.textContent = `Last update: ${timeLabel} | Current CPU: ${Number(metric.total_cpu_percent || 0).toFixed(2)}%`;
+        }
+
+        function setConnectionState(text) {
+            connectionState.textContent = text;
+        }
+
+        function connectLiveStream() {
+            setConnectionState('connecting');
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const socket = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
+
+            socket.onopen = () => {
+                setConnectionState('connected');
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    appendMetricPoint(payload);
+                } catch (_error) {
+                    statusEl.textContent = 'Received malformed metric payload.';
+                }
+            };
+
+            socket.onclose = () => {
+                setConnectionState('reconnecting');
+                statusEl.textContent = 'Live stream disconnected. Reconnecting...';
+                setTimeout(connectLiveStream, RECONNECT_DELAY_MS);
+            };
+
+            socket.onerror = () => {
+                setConnectionState('error');
+                socket.close();
+                statusEl.textContent = 'Failed to connect to live metrics stream.';
+            };
+        }
+
+        async function bootstrapRecent() {
             try {
                 const response = await fetch('/api/metrics/recent', { cache: 'no-store' });
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-
                 const metrics = await response.json();
                 if (!Array.isArray(metrics) || metrics.length === 0) {
                     statusEl.textContent = 'No recent metrics in the last 5 minutes.';
-                    renderProcesses([]);
                     return;
                 }
-
-                updateChart(metrics);
-                renderProcesses(metrics[metrics.length - 1].top_processes || []);
-
-                const latest = metrics[metrics.length - 1];
-                statusEl.textContent = `Last update: ${formatTime(latest.timestamp)} | Current CPU: ${Number(latest.total_cpu_percent || 0).toFixed(2)}%`;
-            } catch (error) {
-                statusEl.textContent = `Failed to fetch metrics: ${error.message}`;
+                metrics.slice(-MAX_POINTS).forEach(appendMetricPoint);
+            } catch (_error) {
+                statusEl.textContent = 'Unable to load recent metrics snapshot.';
             }
         }
 
-        fetchMetrics();
-        setInterval(fetchMetrics, POLL_INTERVAL_MS);
+        bootstrapRecent().finally(connectLiveStream);
     </script>
 </body>
 </html>

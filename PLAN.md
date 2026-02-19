@@ -57,12 +57,12 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Design schema for metrics table in PostgreSQL
 
 ### Dashboard
-- [ ] Switch from polling to WebSocket for real-time updates
-- [ ] Add multi-line chart for per-core CPU usage
-- [ ] Add memory usage visualization
-- [ ] Add thread count visualization
-- [ ] Add I/O metrics visualization
-- [ ] Add handles visualization
+- [x] Switch from polling to WebSocket for real-time updates
+- [x] Add multi-line chart for per-core CPU usage
+- [x] Add memory usage visualization
+- [x] Add thread count visualization
+- [x] Add I/O metrics visualization
+- [x] Add handles visualization
 
 ### Infrastructure
 - [ ] Set up PostgreSQL container
