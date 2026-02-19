@@ -4,6 +4,7 @@ These tests validate endpoint behavior without requiring a live Redis instance.
 """
 
 import json
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
@@ -47,13 +48,15 @@ class FakeRedisIngest:
     """Redis stub exposing ping/pipeline methods used by ingest and health tests."""
 
     def __init__(self):
-        self.pipeline_instance = FakePipeline()
+        self.pipeline_instances = []
 
     def ping(self):
         return True
 
     def pipeline(self):
-        return self.pipeline_instance
+        pipeline = FakePipeline()
+        self.pipeline_instances.append(pipeline)
+        return pipeline
 
 
 class FakeRedisRecent:
@@ -145,7 +148,7 @@ def test_ingest_metrics_success(monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"status": "accepted", "timestamp": payload["timestamp"]}
 
-    pipeline = fake_redis.pipeline_instance
+    pipeline = fake_redis.pipeline_instances[0]
     assert pipeline.executed is True
     assert pipeline.zadd_payload is not None
     assert pipeline.zremrangebyscore_args is not None
@@ -304,3 +307,86 @@ def test_ingest_metrics_rejects_negative_process_memory():
     response = client.post("/ingest/metrics", json=payload)
 
     assert response.status_code == 422
+
+
+def test_ingest_requires_agent_token_when_configured(monkeypatch):
+    """Returns 401 when AGENT_API_TOKEN is configured and header is missing/invalid."""
+
+    fake_redis = FakeRedisIngest()
+    monkeypatch.setattr(backend_main, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(backend_main, "AGENT_API_TOKEN", "secret-token")
+    monkeypatch.setattr(backend_main, "_agent_rate_windows", defaultdict(deque))
+
+    client = TestClient(backend_main.app)
+    response = client.post("/ingest/metrics", json=sample_payload())
+    assert response.status_code == 401
+
+    ok_response = client.post(
+        "/ingest/metrics",
+        json=sample_payload(),
+        headers={"X-Agent-Token": "secret-token"},
+    )
+    assert ok_response.status_code == 200
+
+
+def test_ingest_applies_rate_limit(monkeypatch):
+    """Returns 429 when agent requests exceed configured per-minute budget."""
+
+    fake_redis = FakeRedisIngest()
+    monkeypatch.setattr(backend_main, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(backend_main, "AGENT_API_TOKEN", "")
+    monkeypatch.setattr(backend_main, "AGENT_RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(backend_main, "_agent_rate_windows", defaultdict(deque))
+
+    client = TestClient(backend_main.app)
+    first = client.post("/ingest/metrics", json=sample_payload())
+    second = client.post("/ingest/metrics", json=sample_payload())
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_ingest_triggers_alert_notification(monkeypatch):
+    """Publishes an alert notification when CPU threshold-duration rule is met."""
+
+    fake_redis = FakeRedisIngest()
+    monkeypatch.setattr(backend_main, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(backend_main, "AGENT_API_TOKEN", "")
+    monkeypatch.setattr(backend_main, "AGENT_RATE_LIMIT_PER_MINUTE", 120)
+    monkeypatch.setattr(backend_main, "_agent_rate_windows", defaultdict(deque))
+    monkeypatch.setattr(backend_main, "ALERT_CPU_THRESHOLD", 10.0)
+    monkeypatch.setattr(backend_main, "ALERT_CPU_DURATION_SECONDS", 0)
+    monkeypatch.setattr(backend_main, "_high_cpu_window_start_ts", None)
+    monkeypatch.setattr(backend_main, "_high_cpu_alert_active", False)
+
+    published = []
+    monkeypatch.setattr(backend_main, "publish_alert", lambda alert: published.append(alert))
+
+    client = TestClient(backend_main.app)
+    response = client.post("/ingest/metrics", json=sample_payload())
+
+    assert response.status_code == 200
+    assert len(published) == 1
+    assert published[0].rule == "cpu_threshold_duration"
+
+
+def test_get_recent_alerts(monkeypatch):
+    """Returns parsed alert events from Redis alert timeline."""
+
+    alert = {
+        "timestamp": int(datetime.now(timezone.utc).timestamp()),
+        "rule": "cpu_threshold_duration",
+        "severity": "warning",
+        "message": "CPU high",
+        "current_value": 95.0,
+        "threshold": 90.0,
+    }
+
+    monkeypatch.setattr(backend_main, "get_redis", lambda: FakeRedisRecent([json.dumps(alert)]))
+
+    client = TestClient(backend_main.app)
+    response = client.get("/api/alerts/recent")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["rule"] == "cpu_threshold_duration"

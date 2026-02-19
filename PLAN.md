@@ -83,12 +83,12 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] Add structured logging
 
 ### Backend (Python/FastAPI)
-- [ ] Implement rate limiting for agent connections
-- [ ] Add authentication/authorization for agent
-- [ ] Implement alert rules (e.g., CPU > 90% for 10 seconds)
-- [ ] Add alert notification system
-- [ ] Implement metrics retention policy
-- [ ] Add API documentation (OpenAPI/Swagger)
+- [x] Implement rate limiting for agent connections
+- [x] Add authentication/authorization for agent
+- [x] Implement alert rules (e.g., CPU > 90% for 10 seconds)
+- [x] Add alert notification system
+- [x] Implement metrics retention policy
+- [x] Add API documentation (OpenAPI/Swagger)
 
 ### Dashboard
 - [ ] Add alert status display
@@ -141,5 +141,5 @@ Build a small observability stack for monitoring system metrics on a local machi
 - [x] WebSocket provides live updates without polling
 - [x] PostgreSQL retains historical data
 - [x] System deploys and runs on Minikube
-- [ ] Alerts trigger on defined thresholds
+- [x] Alerts trigger on defined thresholds
 - [ ] System handles graceful shutdown
